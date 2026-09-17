@@ -25,11 +25,11 @@ const canonicalTrace: ExecutionTrace = {
     ],
     variables: [
       { id: "v1", name: "largest", value: 10, color: "#34d399" },
-      { id: "v2", name: "secondLargest", value: "-∞", color: "#fbbf24" },
+      { id: "v2", name: "secondLargest", value: "-inf", color: "#fbbf24" },
     ],
     narration: {
       title: "Step 0: Initial State",
-      text: "Initialize pointers i = 0 and max = 0. Largest = 10, SecondLargest = -∞.",
+      text: "Initialize pointers i = 0 and max = 0. Largest = 10, SecondLargest = -inf.",
     },
   },
   steps: [

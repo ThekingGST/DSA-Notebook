@@ -90,6 +90,24 @@ function createBaseElement(
   return el;
 }
 
+function wrapText(text: string, maxCharsPerLine = 48): string {
+  const words = text.split(" ");
+  const lines: string[] = [];
+  let currentLine = "";
+
+  for (const word of words) {
+    if (!word) continue;
+    if (currentLine.length + word.length + 1 <= maxCharsPerLine) {
+      currentLine += (currentLine ? " " : "") + word;
+    } else {
+      if (currentLine) lines.push(currentLine);
+      currentLine = word;
+    }
+  }
+  if (currentLine) lines.push(currentLine);
+  return lines.join("\n");
+}
+
 export function compileDSAToExcalidraw(dsaState: DSAState): ExcalidrawCompiledElement[] {
   const elements: ExcalidrawCompiledElement[] = [];
   const { arrays, pointers, variables, narration, activeComparison, highlights = [] } = dsaState;
@@ -117,8 +135,8 @@ export function compileDSAToExcalidraw(dsaState: DSAState): ExcalidrawCompiledEl
       );
 
       let strokeColor = "#1e1e1e";
-      let backgroundColor = "rgba(0, 0, 0, 0.02)";
-      let strokeWidth = 1.5;
+      let backgroundColor = "#ffffff";
+      let strokeWidth = 2;
 
       if (isComparing) {
         strokeColor = "#d97706"; // amber
@@ -278,25 +296,35 @@ export function compileDSAToExcalidraw(dsaState: DSAState): ExcalidrawCompiledEl
 
   // 4. Compile Step Narration Card
   if (narration && narration.title) {
+    const wrappedExplanation = narration.text ? wrapText(narration.text, 52) : "";
+    const fullText = wrappedExplanation
+      ? `${narration.title}\n${wrappedExplanation}`
+      : narration.title;
+
+    const lineCount = fullText.split("\n").length;
+    const cardHeight = Math.max(44, lineCount * 22 + 6);
+
     const narrationEl = createBaseElement(
       "narration_card",
       "text",
       140,
-      80,
-      450,
-      44,
+      68,
+      520,
+      cardHeight,
       ["narration_group"],
       { dsaType: "narration" }
     );
-    const text = `📝 ${narration.title}\n${narration.text || ""}`;
-    narrationEl.text = text;
-    narrationEl.originalText = text;
+    narrationEl.text = fullText;
+    narrationEl.originalText = fullText;
     narrationEl.fontSize = 15;
     narrationEl.fontFamily = 1;
+    narrationEl.lineHeight = 1.35 as any;
     narrationEl.textAlign = "left";
-    narrationEl.strokeColor = "#121214";
+    narrationEl.verticalAlign = "top";
+    narrationEl.strokeColor = "#18181b";
     elements.push(narrationEl);
   }
 
   return elements;
 }
+
