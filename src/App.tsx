@@ -9,6 +9,7 @@ import { useAlgorithmPlayback } from "./hooks/useAlgorithmPlayback";
 import { useTeacherMode } from "./hooks/useTeacherMode";
 import { compileDSAToExcalidraw } from "./compiler/compileDSAToExcalidraw";
 import { ExecutionTrace } from "./engine/types";
+import { ErrorBoundary } from "./components/ErrorBoundary";
 import "./App.css";
 
 const canonicalTrace: ExecutionTrace = {
@@ -151,68 +152,70 @@ export const App: React.FC = () => {
   };
 
   return (
-    <div className="app-container">
-      <Header mode={mode} onModeChange={setMode} />
-      <main className="main-viewport">
-        <WhiteboardCanvas
-          mode={mode}
-          initialElements={compiledElements}
-          isRapidStepping={isRapidStepping}
-          onCellDoubleClick={setActiveEdit}
-          onPointerSnap={movePointer}
-          onArrayMove={updateArrayPosition}
-          onViewportChange={setViewport}
-          onCellClick={(_arrayId, index) => {
-            if (activePointerId) {
-              movePointer(activePointerId, index);
-            }
-          }}
-        />
-
-        {/* Student Mode: Playback Dock */}
-        {mode === "student" && (
-          <PlaybackDock
-            currentStep={currentStep}
-            totalSteps={totalSteps}
-            isPlaying={isPlaying}
-            onStepChange={stepTo}
-            onTogglePlay={togglePlay}
-            onReset={resetPlayback}
-          />
-        )}
-
-        {/* Teacher Mode: Authoring Tools */}
-        {mode === "teacher" && (
-          <>
-            <ArrayEndControls
-              arrays={teacherRawState.arrays}
-              pointers={teacherRawState.pointers}
-              activePointerId={activePointerId}
-              scrollX={viewport.scrollX}
-              scrollY={viewport.scrollY}
-              zoom={viewport.zoom}
-              isEditing={activeEdit !== null}
-              onAppendCell={appendCell}
-              onRemoveCell={removeCell}
-              onNavigatePointer={movePointer}
-            />
-            <TeacherToolbox
-              arrays={teacherRawState.arrays}
-              onAddArray={addArray}
-              onAddPointer={(arrayId, name, color) =>
-                addPointer(arrayId, name, 0, color)
+    <ErrorBoundary>
+      <div className="app-container">
+        <Header mode={mode} onModeChange={setMode} />
+        <main className="main-viewport">
+          <WhiteboardCanvas
+            mode={mode}
+            initialElements={compiledElements}
+            isRapidStepping={isRapidStepping}
+            onCellDoubleClick={setActiveEdit}
+            onPointerSnap={movePointer}
+            onArrayMove={updateArrayPosition}
+            onViewportChange={mode === "teacher" ? setViewport : undefined}
+            onCellClick={(_arrayId, index) => {
+              if (activePointerId) {
+                movePointer(activePointerId, index);
               }
-              onReset={resetTeacherState}
+            }}
+          />
+
+          {/* Student Mode: Playback Dock */}
+          {mode === "student" && (
+            <PlaybackDock
+              currentStep={currentStep}
+              totalSteps={totalSteps}
+              isPlaying={isPlaying}
+              onStepChange={stepTo}
+              onTogglePlay={togglePlay}
+              onReset={resetPlayback}
             />
-            <CellInlineEditor
-              activeEdit={activeEdit}
-              onCommit={handleCommitCellEdit}
-              onCancel={handleCancelCellEdit}
-            />
-          </>
-        )}
-      </main>
-    </div>
+          )}
+
+          {/* Teacher Mode: Authoring Tools */}
+          {mode === "teacher" && (
+            <>
+              <ArrayEndControls
+                arrays={teacherRawState.arrays}
+                pointers={teacherRawState.pointers}
+                activePointerId={activePointerId}
+                scrollX={viewport.scrollX}
+                scrollY={viewport.scrollY}
+                zoom={viewport.zoom}
+                isEditing={activeEdit !== null}
+                onAppendCell={appendCell}
+                onRemoveCell={removeCell}
+                onNavigatePointer={movePointer}
+              />
+              <TeacherToolbox
+                arrays={teacherRawState.arrays}
+                onAddArray={addArray}
+                onAddPointer={(arrayId, name, color) =>
+                  addPointer(arrayId, name, 0, color)
+                }
+                onReset={resetTeacherState}
+              />
+              <CellInlineEditor
+                activeEdit={activeEdit}
+                onCommit={handleCommitCellEdit}
+                onCancel={handleCancelCellEdit}
+              />
+            </>
+          )}
+        </main>
+      </div>
+    </ErrorBoundary>
   );
 };
 

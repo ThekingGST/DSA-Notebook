@@ -36,6 +36,8 @@ export const WhiteboardCanvas: React.FC<WhiteboardCanvasProps> = ({
   const animFrameRef = useRef<number | null>(null);
   const lastKnownPointerPositionsRef = useRef<Map<string, number>>(new Map());
   const lastKnownArrayPositionsRef = useRef<Map<string, { x: number; y: number }>>(new Map());
+  const lastViewportRef = useRef({ scrollX: 0, scrollY: 0, zoom: 1 });
+  const lastSelectedCellRef = useRef<string | null>(null);
 
   const commitScene = useCallback(
     (elements: ExcalidrawCompiledElement[]) => {
@@ -64,6 +66,19 @@ export const WhiteboardCanvas: React.FC<WhiteboardCanvasProps> = ({
     },
     [excalidrawAPI]
   );
+
+  useEffect(() => {
+    initialElements.forEach((el) => {
+      if (el.customData?.dsaType === "cell" && el.customData.arrayId && el.customData.index === 0) {
+        lastKnownArrayPositionsRef.current.set(el.customData.arrayId as string, { x: el.x, y: el.y });
+      }
+      if (el.customData?.dsaType === "pointer") {
+        const pointerId = (el.customData.pointerId as string) || el.id.replace(/^ptr_/, "");
+        lastKnownPointerPositionsRef.current.set(pointerId, (el.customData.index as number) ?? 0);
+      }
+    });
+  }, [initialElements]);
+
 
 
   useEffect(() => {
@@ -238,12 +253,27 @@ export const WhiteboardCanvas: React.FC<WhiteboardCanvasProps> = ({
   const handleExcalidrawChange = (elements: readonly any[], appState: any) => {
     if (!appState) return;
 
-    if (onViewportChange) {
-      onViewportChange({
-        scrollX: appState.scrollX || 0,
-        scrollY: appState.scrollY || 0,
-        zoom: appState.zoom?.value || 1,
-      });
+    if (onViewportChange && mode === "teacher") {
+      const nextScrollX = appState.scrollX || 0;
+      const nextScrollY = appState.scrollY || 0;
+      const nextZoom = appState.zoom?.value || 1;
+      const prev = lastViewportRef.current;
+      if (
+        Math.abs(prev.scrollX - nextScrollX) > 0.5 ||
+        Math.abs(prev.scrollY - nextScrollY) > 0.5 ||
+        Math.abs(prev.zoom - nextZoom) > 0.01
+      ) {
+        lastViewportRef.current = {
+          scrollX: nextScrollX,
+          scrollY: nextScrollY,
+          zoom: nextZoom,
+        };
+        onViewportChange({
+          scrollX: nextScrollX,
+          scrollY: nextScrollY,
+          zoom: nextZoom,
+        });
+      }
     }
 
     if (mode !== "teacher") return;
@@ -269,7 +299,12 @@ export const WhiteboardCanvas: React.FC<WhiteboardCanvasProps> = ({
         const cell0 = cells.find((c) => c.customData?.index === 0) || cells[0];
         if (cell0) {
           const lastPos = lastKnownArrayPositionsRef.current.get(arrId);
-          if (!lastPos || lastPos.x !== cell0.x || lastPos.y !== cell0.y) {
+          if (!lastPos) {
+            lastKnownArrayPositionsRef.current.set(arrId, { x: cell0.x, y: cell0.y });
+          } else if (
+            Math.abs(lastPos.x - cell0.x) > 1 ||
+            Math.abs(lastPos.y - cell0.y) > 1
+          ) {
             lastKnownArrayPositionsRef.current.set(arrId, { x: cell0.x, y: cell0.y });
             onArrayMove(arrId, { x: cell0.x, y: cell0.y });
           }
@@ -299,7 +334,9 @@ export const WhiteboardCanvas: React.FC<WhiteboardCanvasProps> = ({
             const snappedIdx = Math.max(0, Math.min(arrayCells.length - 1, rawIdx));
 
             const lastPos = lastKnownPointerPositionsRef.current.get(pointerId);
-            if (lastPos !== snappedIdx) {
+            if (lastPos === undefined) {
+              lastKnownPointerPositionsRef.current.set(pointerId, snappedIdx);
+            } else if (lastPos !== snappedIdx) {
               lastKnownPointerPositionsRef.current.set(pointerId, snappedIdx);
               onPointerSnap(pointerId, snappedIdx);
             }
@@ -316,14 +353,22 @@ export const WhiteboardCanvas: React.FC<WhiteboardCanvasProps> = ({
           selectedIds.includes(el.id) &&
           (el.customData?.dsaType === "cell" || el.customData?.dsaType === "valueText")
       );
-      if (selectedCell) {
+      const selectedKey = selectedCell
+        ? `${selectedCell.customData.arrayId}_${selectedCell.customData.index}`
+        : null;
+
+      if (selectedKey && selectedKey !== lastSelectedCellRef.current) {
+        lastSelectedCellRef.current = selectedKey;
         onCellClick(
           selectedCell.customData.arrayId,
           selectedCell.customData.index
         );
+      } else if (!selectedKey) {
+        lastSelectedCellRef.current = null;
       }
     }
   };
+
 
 
   return (
