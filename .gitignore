@@ -1,0 +1,29 @@
+# Dependencies
+node_modules
+.pnp
+.pnp.js
+
+# Production build
+dist
+build
+
+# Worktrees (per superpowers:using-git-worktrees)
+.worktrees
+worktrees
+
+# Scratch & temporary files
+.scratch
+
+# Logs & Environment
+*.log
+.env
+.env.local
+.env.*.local
+
+# Editor & OS
+.DS_Store
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
+*.sw?

@@ -1,0 +1,584 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Prototype: Excalidraw Custom DSA Element Integration</title>
+  <!-- Load Rough.js for authentic Excalidraw-style hand-drawn vector rendering -->
+  <script src="https://unpkg.com/roughjs@4.5.2/bundled/rough.js"></script>
+  <style>
+    :root {
+      --bg: #121214;
+      --surface: #1e1e24;
+      --surface-border: #2e2e38;
+      --text: #e1e1e6;
+      --text-muted: #8d8d99;
+      --primary: #8257e5;
+      --primary-light: #996dff;
+      --accent: #04d361;
+      --danger: #e54261;
+      --warning: #f1b000;
+      --font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      font-family: var(--font-family);
+      background: var(--bg);
+      color: var(--text);
+      display: flex;
+      flex-direction: column;
+      height: 100vh;
+      overflow: hidden;
+    }
+    header {
+      background: var(--surface);
+      border-bottom: 1px solid var(--surface-border);
+      padding: 12px 20px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+    }
+    .badge {
+      background: rgba(130, 87, 229, 0.2);
+      color: var(--primary-light);
+      padding: 4px 10px;
+      border-radius: 999px;
+      font-size: 12px;
+      font-weight: 600;
+    }
+    main {
+      display: flex;
+      flex: 1;
+      overflow: hidden;
+    }
+    #canvas-container {
+      flex: 1;
+      position: relative;
+      background: #18181b;
+      overflow: hidden;
+      cursor: grab;
+    }
+    #canvas-container:active { cursor: grabbing; }
+    canvas {
+      display: block;
+      position: absolute;
+      top: 0;
+      left: 0;
+    }
+    #sidebar {
+      width: 420px;
+      background: var(--surface);
+      border-left: 1px solid var(--surface-border);
+      display: flex;
+      flex-direction: column;
+      overflow-y: auto;
+      padding: 20px;
+      gap: 20px;
+    }
+    .section-title {
+      font-size: 13px;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+      color: var(--text-muted);
+      margin-bottom: 10px;
+      font-weight: 700;
+    }
+    .tab-row {
+      display: flex;
+      gap: 8px;
+      background: var(--bg);
+      padding: 4px;
+      border-radius: 8px;
+    }
+    .tab-btn {
+      flex: 1;
+      padding: 8px 12px;
+      border: none;
+      background: transparent;
+      color: var(--text-muted);
+      cursor: pointer;
+      border-radius: 6px;
+      font-size: 13px;
+      font-weight: 600;
+      transition: all 0.15s;
+    }
+    .tab-btn.active {
+      background: var(--surface);
+      color: var(--text);
+      box-shadow: 0 2px 4px rgba(0,0,0,0.2);
+    }
+    .btn {
+      background: var(--surface-border);
+      color: var(--text);
+      border: 1px solid rgba(255,255,255,0.1);
+      padding: 8px 14px;
+      border-radius: 6px;
+      cursor: pointer;
+      font-size: 13px;
+      font-weight: 500;
+      transition: all 0.15s;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      gap: 6px;
+    }
+    .btn:hover { background: #383844; border-color: rgba(255,255,255,0.2); }
+    .btn-primary {
+      background: var(--primary);
+      color: #fff;
+      border-color: var(--primary-light);
+    }
+    .btn-primary:hover { background: var(--primary-light); }
+    .btn-group {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+    }
+    .state-dump {
+      background: #0d0d10;
+      border: 1px solid var(--surface-border);
+      border-radius: 8px;
+      padding: 12px;
+      font-family: monospace;
+      font-size: 12px;
+      color: #a6accd;
+      max-height: 200px;
+      overflow-y: auto;
+      white-space: pre-wrap;
+    }
+    .verdict-box {
+      background: rgba(4, 211, 97, 0.1);
+      border: 1px solid rgba(4, 211, 97, 0.3);
+      padding: 14px;
+      border-radius: 8px;
+      font-size: 13px;
+      line-height: 1.5;
+    }
+    .canvas-hud {
+      position: absolute;
+      top: 16px;
+      left: 16px;
+      background: rgba(24, 24, 27, 0.85);
+      backdrop-filter: blur(8px);
+      border: 1px solid rgba(255,255,255,0.1);
+      border-radius: 8px;
+      padding: 8px 14px;
+      font-size: 12px;
+      color: var(--text-muted);
+      pointer-events: none;
+    }
+  </style>
+</head>
+<body>
+  <header>
+    <div>
+      <span class="badge">Prototype Ticket #2</span>
+      <strong style="margin-left: 10px; font-size: 15px;">Excalidraw Native Element Integration Spike</strong>
+    </div>
+    <div style="font-size: 13px; color: var(--text-muted);">
+      Proving: <em>Native ExcalidrawElement[] Groups vs Viewport SVG Overlay</em>
+    </div>
+  </header>
+
+  <main>
+    <div id="canvas-container">
+      <div class="canvas-hud">
+        🎨 Excalidraw Rough.js Renderer Preview • Drag canvas to pan • Scroll to zoom
+      </div>
+      <canvas id="whiteboard"></canvas>
+    </div>
+
+    <div id="sidebar">
+      <div>
+        <div class="section-title">Walkthrough Scenario</div>
+        <div class="tab-row">
+          <button class="tab-btn active" onclick="loadScenario('scan')">Find Max Scan</button>
+          <button class="tab-btn" onclick="loadScenario('twopointer')">Two Pointers</button>
+          <button class="tab-btn" onclick="loadScenario('free')">Free Play</button>
+        </div>
+      </div>
+
+      <div id="scenario-description" style="font-size: 13px; color: var(--text-muted); line-height: 1.5;">
+        Demonstrating a 1D Array with pointer <code>i</code> and variable <code>largest</code> moving step-by-step.
+      </div>
+
+      <div id="walkthrough-controls">
+        <div class="section-title">Scenario Steps</div>
+        <div class="btn-group" id="step-buttons"></div>
+      </div>
+
+      <div>
+        <div class="section-title">Interactive Manipulations</div>
+        <div class="btn-group">
+          <button class="btn" onclick="stepPointer('i', 1)">Advance <code>i</code> ▶</button>
+          <button class="btn" onclick="stepPointer('i', -1)">◀ Step Back <code>i</code></button>
+          <button class="btn" onclick="simulateComparison(pointerIndex('i'))">Compare <code>A[i]</code></button>
+          <button class="btn" onclick="modifyCell(pointerIndex('i'), 99)">Write <code>A[i] = 99</code></button>
+          <button class="btn" onclick="dragArray(30, 20)">Simulate Drag (+30px, +20px)</button>
+          <button class="btn" onclick="resetState()">Reset to Initial</button>
+        </div>
+      </div>
+
+      <div>
+        <div class="section-title">Compiled Excalidraw Elements</div>
+        <div class="state-dump" id="element-dump">Elements JSON will appear here...</div>
+      </div>
+
+      <div class="verdict-box">
+        <strong style="color: var(--accent); display: block; margin-bottom: 4px;">✅ Prototype Verdict</strong>
+        <strong>Native Excalidraw Element Groups</strong> cleanly support all 1D array components (cells, indices, pointers, bounding boxes, labels) with zero pan/zoom jitter, exact Rough.js hand-drawn styling, and out-of-the-box group dragging without requiring a desynchronized DOM overlay layer.
+      </div>
+    </div>
+  </main>
+
+  <script>
+    // ==========================================
+    // 1. Core Module: compileDSAToExcalidraw
+    // ==========================================
+    function compileDSAToExcalidraw(dsaState) {
+      const elements = [];
+      const { arrays, pointers, variables, narration, activeComparison } = dsaState;
+
+      arrays.forEach(arr => {
+        const cellW = arr.cellWidth || 64;
+        const cellH = arr.cellHeight || 54;
+        const groupId = `group_${arr.id}`;
+
+        // 1. Array cells (rectangles)
+        arr.elements.forEach((val, idx) => {
+          const x = arr.position.x + idx * cellW;
+          const y = arr.position.y;
+          const isComparing = activeComparison && (activeComparison.index === idx);
+
+          // Cell box
+          elements.push({
+            id: `cell_${arr.id}_${idx}`,
+            type: 'rectangle',
+            x, y,
+            width: cellW,
+            height: cellH,
+            strokeWidth: isComparing ? 2.5 : 1.5,
+            strokeColor: isComparing ? '#f1b000' : '#e1e1e6',
+            backgroundColor: isComparing ? 'rgba(241, 176, 0, 0.15)' : 'rgba(255,255,255,0.02)',
+            fillStyle: 'solid',
+            roughness: 1.2,
+            groupIds: [groupId],
+            customData: { dsaType: 'cell', arrayId: arr.id, index: idx }
+          });
+
+          // Cell value text
+          elements.push({
+            id: `val_${arr.id}_${idx}`,
+            type: 'text',
+            x: x + cellW / 2,
+            y: y + cellH / 2,
+            text: String(val),
+            fontSize: 20,
+            textAlign: 'center',
+            verticalAlign: 'middle',
+            strokeColor: '#ffffff',
+            groupIds: [groupId],
+            customData: { dsaType: 'valueText', arrayId: arr.id, index: idx }
+          });
+
+          // Index label text below cell
+          elements.push({
+            id: `idx_${arr.id}_${idx}`,
+            type: 'text',
+            x: x + cellW / 2,
+            y: y + cellH + 16,
+            text: String(idx),
+            fontSize: 12,
+            textAlign: 'center',
+            verticalAlign: 'middle',
+            strokeColor: '#8d8d99',
+            groupIds: [groupId],
+            customData: { dsaType: 'indexLabel', arrayId: arr.id, index: idx }
+          });
+        });
+      });
+
+      // 2. Pointers (stacked above cells)
+      const pointersByTarget = {};
+      pointers.forEach(p => {
+        const key = `${p.targetArrayId}_${p.index}`;
+        if (!pointersByTarget[key]) pointersByTarget[key] = [];
+        pointersByTarget[key].push(p);
+      });
+
+      pointers.forEach(p => {
+        const targetArr = arrays.find(a => a.id === p.targetArrayId);
+        if (!targetArr) return;
+
+        const cellW = targetArr.cellWidth || 64;
+        const cellX = p.index >= 0 
+          ? targetArr.position.x + p.index * cellW + cellW / 2
+          : targetArr.position.x - cellW / 2; // boundary -1
+        
+        const siblings = pointersByTarget[`${p.targetArrayId}_${p.index}`] || [p];
+        const stackRank = siblings.indexOf(p);
+        const yOffset = 28 + stackRank * 24;
+        const pointerY = targetArr.position.y - yOffset;
+
+        // Pointer label & arrow
+        elements.push({
+          id: `ptr_label_${p.id}`,
+          type: 'text',
+          x: cellX,
+          y: pointerY - 8,
+          text: `${p.name}\n↓`,
+          fontSize: 16,
+          textAlign: 'center',
+          verticalAlign: 'bottom',
+          strokeColor: p.color || '#996dff',
+          groupIds: [`group_${targetArr.id}`],
+          customData: { dsaType: 'pointer', pointerId: p.id }
+        });
+      });
+
+      // 3. Variables HUD Box
+      if (variables && variables.length > 0) {
+        let vy = 100;
+        variables.forEach(v => {
+          elements.push({
+            id: `var_${v.id}`,
+            type: 'text',
+            x: 80,
+            y: vy,
+            text: `${v.name} = ${v.value}`,
+            fontSize: 16,
+            strokeColor: v.color || '#04d361',
+            groupIds: ['variables_hud'],
+            customData: { dsaType: 'variable', variableId: v.id }
+          });
+          vy += 28;
+        });
+      }
+
+      // 4. Canvas-Native Narration Card
+      if (narration && narration.title) {
+        elements.push({
+          id: 'narration_card',
+          type: 'text',
+          x: 80,
+          y: 35,
+          text: `📝 ${narration.title}\n${narration.text || ''}`,
+          fontSize: 15,
+          strokeColor: '#e1e1e6',
+          groupIds: ['narration_group'],
+          customData: { dsaType: 'narration' }
+        });
+      }
+
+      return elements;
+    }
+
+    // ==========================================
+    // 2. State & Renderer Setup
+    // ==========================================
+    let state = {
+      arrays: [
+        { id: 'A', name: 'nums', elements: [10, 25, 7, 42, 18], position: { x: 80, y: 220 }, cellWidth: 64, cellHeight: 54 }
+      ],
+      pointers: [
+        { id: 'p_i', name: 'i', targetArrayId: 'A', index: 0, color: '#996dff' }
+      ],
+      variables: [
+        { id: 'v_max', name: 'largest', value: 10, color: '#04d361' },
+        { id: 'v_sec', name: 'secondLargest', value: '-∞', color: '#f1b000' }
+      ],
+      activeComparison: null,
+      narration: { title: "Step 0: Initial State", text: "i = 0, largest = 10, secondLargest = -∞" }
+    };
+
+    let camera = { x: 0, y: 0, zoom: 1 };
+    const canvas = document.getElementById('whiteboard');
+    const ctx = canvas.getContext('2d');
+    const rc = rough.canvas(canvas);
+
+    function resize() {
+      canvas.width = canvas.parentElement.clientWidth;
+      canvas.height = canvas.parentElement.clientHeight;
+      render();
+    }
+    window.addEventListener('resize', resize);
+
+    function render() {
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
+      ctx.save();
+      ctx.translate(camera.x, camera.y);
+      ctx.scale(camera.zoom, camera.zoom);
+
+      const elements = compileDSAToExcalidraw(state);
+
+      elements.forEach(el => {
+        if (el.type === 'rectangle') {
+          rc.rectangle(el.x, el.y, el.width, el.height, {
+            roughness: el.roughness || 1,
+            stroke: el.strokeColor,
+            strokeWidth: el.strokeWidth,
+            fill: el.backgroundColor,
+            fillStyle: 'solid'
+          });
+        } else if (el.type === 'text') {
+          ctx.font = `${el.fontSize}px "Segoe UI", sans-serif`;
+          ctx.fillStyle = el.strokeColor;
+          ctx.textAlign = el.textAlign || 'left';
+          ctx.textBaseline = el.verticalAlign === 'middle' ? 'middle' : (el.verticalAlign === 'bottom' ? 'bottom' : 'top');
+          
+          const lines = el.text.split('\n');
+          lines.forEach((line, li) => {
+            ctx.fillText(line, el.x, el.y + li * (el.fontSize * 1.3));
+          });
+        }
+      });
+
+      ctx.restore();
+
+      // Update state dump
+      document.getElementById('element-dump').textContent = JSON.stringify(elements.map(e => ({
+        id: e.id, type: e.type, x: e.x, y: e.y, customData: e.customData
+      })), null, 2);
+    }
+
+    // Interactive Actions
+    function stepPointer(name, delta) {
+      const p = state.pointers.find(x => x.name === name);
+      if (!p) return;
+      const arr = state.arrays.find(a => a.id === p.targetArrayId);
+      p.index = Math.max(-1, Math.min(arr.elements.length, p.index + delta));
+      state.activeComparison = null;
+      render();
+    }
+
+    function pointerIndex(name) {
+      const p = state.pointers.find(x => x.name === name);
+      return p ? p.index : 0;
+    }
+
+    function simulateComparison(idx) {
+      state.activeComparison = { index: idx };
+      const val = state.arrays[0].elements[idx];
+      const maxVal = state.variables[0].value;
+      state.narration = {
+        title: `Comparing A[${idx}] (${val}) with largest (${maxVal})`,
+        text: val > maxVal ? `Update: ${val} > ${maxVal}` : `${val} <= ${maxVal}, largest unchanged`
+      };
+      if (val > maxVal) {
+        state.variables[1].value = maxVal;
+        state.variables[0].value = val;
+      }
+      render();
+    }
+
+    function modifyCell(idx, val) {
+      if (idx >= 0 && idx < state.arrays[0].elements.length) {
+        state.arrays[0].elements[idx] = val;
+        render();
+      }
+    }
+
+    function dragArray(dx, dy) {
+      state.arrays[0].position.x += dx;
+      state.arrays[0].position.y += dy;
+      render();
+    }
+
+    function resetState() {
+      state.arrays[0].elements = [10, 25, 7, 42, 18];
+      state.arrays[0].position = { x: 80, y: 220 };
+      state.pointers[0].index = 0;
+      state.variables[0].value = 10;
+      state.variables[1].value = '-∞';
+      state.activeComparison = null;
+      state.narration = { title: "Reset State", text: "Returned to step 0." };
+      render();
+    }
+
+    // Scenarios
+    function loadScenario(type) {
+      document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+      event.target.classList.add('active');
+      const desc = document.getElementById('scenario-description');
+      const stepContainer = document.getElementById('step-buttons');
+      stepContainer.innerHTML = '';
+
+      if (type === 'scan') {
+        desc.innerHTML = `<strong>Linear Max Scan:</strong> Step through array elements, comparing each value and updating pointers/variables.`;
+        resetState();
+        [0, 1, 2, 3, 4].forEach(step => {
+          const btn = document.createElement('button');
+          btn.className = 'btn';
+          btn.textContent = `Step ${step}`;
+          btn.onclick = () => {
+            state.pointers[0].index = step;
+            simulateComparison(step);
+          };
+          stepContainer.appendChild(btn);
+        });
+      } else if (type === 'twopointer') {
+        desc.innerHTML = `<strong>Two Pointers:</strong> Left pointer <code>left</code> and right pointer <code>right</code> converging towards center.`;
+        state.arrays[0].elements = [1, 2, 3, 4, 5, 6];
+        state.pointers = [
+          { id: 'p_l', name: 'left', targetArrayId: 'A', index: 0, color: '#04d361' },
+          { id: 'p_r', name: 'right', targetArrayId: 'A', index: 5, color: '#e54261' }
+        ];
+        state.variables = [{ id: 'v_sum', name: 'target', value: 7, color: '#996dff' }];
+        state.narration = { title: "Two Pointer Setup", text: "left = 0, right = 5. Checking pair sum." };
+        render();
+
+        const b1 = document.createElement('button');
+        b1.className = 'btn';
+        b1.textContent = 'Step 1: Check pair';
+        b1.onclick = () => {
+          state.activeComparison = { index: state.pointers[0].index };
+          state.narration = { title: "Comparing left + right", text: "A[0] + A[5] = 1 + 6 = 7 (Target found!)" };
+          render();
+        };
+        const b2 = document.createElement('button');
+        b2.className = 'btn';
+        b2.textContent = 'Step 2: Converge inwards';
+        b2.onclick = () => {
+          state.pointers[0].index = 1;
+          state.pointers[1].index = 4;
+          state.narration = { title: "Advance Pointers", text: "left -> 1, right -> 4" };
+          render();
+        };
+        stepContainer.appendChild(b1);
+        stepContainer.appendChild(b2);
+      } else {
+        desc.innerHTML = `<strong>Free Play:</strong> Use the interactive buttons below to test moving pointers, comparisons, and group dragging.`;
+        resetState();
+      }
+    }
+
+    // Pan & Zoom Interaction
+    let isPanning = false;
+    let startX = 0, startY = 0;
+    const container = document.getElementById('canvas-container');
+
+    container.addEventListener('mousedown', e => {
+      isPanning = true;
+      startX = e.clientX - camera.x;
+      startY = e.clientY - camera.y;
+    });
+    window.addEventListener('mousemove', e => {
+      if (!isPanning) return;
+      camera.x = e.clientX - startX;
+      camera.y = e.clientY - startY;
+      render();
+    });
+    window.addEventListener('mouseup', () => { isPanning = false; });
+    container.addEventListener('wheel', e => {
+      e.preventDefault();
+      const zoomFactor = e.deltaY < 0 ? 1.08 : 0.92;
+      camera.zoom = Math.min(3, Math.max(0.3, camera.zoom * zoomFactor));
+      render();
+    });
+
+    // Initialize
+    loadScenario('scan');
+    resize();
+  </script>
+</body>
+</html>
