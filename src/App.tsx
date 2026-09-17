@@ -166,9 +166,27 @@ export const App: React.FC = () => {
             onPointerSelect={setActivePointerId}
             onArrayMove={updateArrayPosition}
             onViewportChange={mode === "teacher" ? setViewport : undefined}
-            onCellClick={(_arrayId, index) => {
-              if (activePointerId) {
-                movePointer(activePointerId, index);
+            onCellClick={(arrayId, index) => {
+              const arrPointers = teacherRawState.pointers.filter(
+                (p) => p.targetArrayId === arrayId
+              );
+              const targetPointer =
+                arrPointers.find((p) => p.id === activePointerId) || arrPointers[0];
+
+              if (targetPointer) {
+                movePointer(targetPointer.id, index);
+                setActivePointerId(targetPointer.id);
+              } else {
+                // If this array doesn't have a pointer yet, attach one directly to this cell
+                const pointerNames = ["i", "j", "k", "left", "right", "mid"];
+                const pointerColors = ["#38bdf8", "#34d399", "#fbbf24", "#f87171", "#a78bfa"];
+                const usedNames = new Set(teacherRawState.pointers.map((p) => p.name));
+                const nextName =
+                  pointerNames.find((n) => !usedNames.has(n)) ||
+                  `p${teacherRawState.pointers.length + 1}`;
+                const nextColor =
+                  pointerColors[teacherRawState.pointers.length % pointerColors.length];
+                addPointer(arrayId, nextName, index, nextColor);
               }
             }}
           />

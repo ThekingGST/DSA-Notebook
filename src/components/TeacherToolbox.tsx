@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import { DSAArray } from "../engine/types";
 import "./TeacherToolbox.css";
 
@@ -46,6 +46,16 @@ export const TeacherToolbox: React.FC<TeacherToolboxProps> = ({
     arrays[0]?.id || ""
   );
 
+  // Sync selectedArrayId when arrays change so the newest or valid array is targeted
+  useEffect(() => {
+    if (arrays.length > 0) {
+      const exists = arrays.some((a) => a.id === selectedArrayId);
+      if (!exists || selectedArrayId === "") {
+        setSelectedArrayId(arrays[arrays.length - 1].id);
+      }
+    }
+  }, [arrays, selectedArrayId]);
+
   const handleToggleArrayPopover = () => {
     setArrayPopoverOpen((prev) => !prev);
     if (pointerPopoverOpen) setPointerPopoverOpen(false);
@@ -89,7 +99,10 @@ export const TeacherToolbox: React.FC<TeacherToolboxProps> = ({
   };
 
   const handleAttachPointer = (name: string, color: string) => {
-    const targetId = selectedArrayId || arrays[0]?.id;
+    const targetId =
+      arrays.find((a) => a.id === selectedArrayId)?.id ||
+      arrays[arrays.length - 1]?.id ||
+      arrays[0]?.id;
     if (!targetId) return;
     onAddPointer(targetId, name, color);
     setPointerPopoverOpen(false);

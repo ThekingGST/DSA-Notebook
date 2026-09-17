@@ -177,5 +177,80 @@ describe("useTeacherMode hook", () => {
     });
     expect(result.current.state.arrays[0].elements).toEqual([10, 25, 30]);
   });
+
+  it("maintains independent pointer positions across multiple arrays when moved", () => {
+    const { result } = renderHook(() =>
+      useTeacherMode({
+        arrays: [
+          { id: "A1", name: "nums1", elements: [10, 20, 30, 40], position: { x: 100, y: 100 } },
+          { id: "A2", name: "nums2", elements: [50, 60, 70, 80], position: { x: 100, y: 250 } },
+        ],
+        pointers: [
+          { id: "ptr_i", name: "i", targetArrayId: "A1", index: 0, color: "#a78bfa" },
+          { id: "ptr_j", name: "j", targetArrayId: "A2", index: 0, color: "#38bdf8" },
+        ],
+        variables: [],
+      })
+    );
+
+    // 1. Move pointer i on Array 1 to index 3
+    act(() => {
+      result.current.movePointer("ptr_i", 3);
+    });
+
+    expect(result.current.state.pointers.find((p) => p.id === "ptr_i")?.index).toBe(3);
+    expect(result.current.state.pointers.find((p) => p.id === "ptr_j")?.index).toBe(0);
+
+    // 2. Move pointer j on Array 2 to index 2
+    act(() => {
+      result.current.movePointer("ptr_j", 2);
+    });
+
+    // Array 1's pointer i must REMAIN at index 3 and NOT reset to 0
+    expect(result.current.state.pointers.find((p) => p.id === "ptr_i")?.index).toBe(3);
+    expect(result.current.state.pointers.find((p) => p.id === "ptr_j")?.index).toBe(2);
+
+    // 3. Move pointer i again to index 1
+    act(() => {
+      result.current.movePointer("ptr_i", 1);
+    });
+
+    // Array 2's pointer j must REMAIN at index 2
+    expect(result.current.state.pointers.find((p) => p.id === "ptr_i")?.index).toBe(1);
+    expect(result.current.state.pointers.find((p) => p.id === "ptr_j")?.index).toBe(2);
+  });
+
+  it("auto-creates dedicated pointer and activates it when addArray is called", () => {
+    const { result } = renderHook(() =>
+      useTeacherMode({
+        arrays: [
+          { id: "A1", name: "nums1", elements: [1, 2, 3], position: { x: 140, y: 320 } },
+        ],
+        pointers: [
+          { id: "ptr_i", name: "i", targetArrayId: "A1", index: 2, color: "#a78bfa" },
+        ],
+        variables: [],
+      })
+    );
+
+    act(() => {
+      result.current.addArray("nums2", [4, 5, 6]);
+    });
+
+    expect(result.current.state.arrays.length).toBe(2);
+    expect(result.current.state.pointers.length).toBe(2);
+
+    const arr1Pointer = result.current.state.pointers.find((p) => p.targetArrayId === "A1");
+    const arr2Pointer = result.current.state.pointers.find((p) => p.targetArrayId !== "A1");
+
+    // Array 1's pointer stayed at 2
+    expect(arr1Pointer?.index).toBe(2);
+
+    // Array 2 got a new pointer at 0
+    expect(arr2Pointer).toBeDefined();
+    expect(arr2Pointer?.index).toBe(0);
+    expect(arr2Pointer?.name).toBe("j");
+    expect(result.current.activePointerId).toBe(arr2Pointer?.id);
+  });
 });
 

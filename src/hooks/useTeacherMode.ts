@@ -41,6 +41,9 @@ export function useTeacherMode(initialState?: Partial<TeacherState>) {
       elements: (number | string)[],
       position?: { x: number; y: number }
     ) => {
+      const arrayId = `arr_${Date.now()}_${Math.floor(Math.random() * 1000)}`;
+      const pointerId = `ptr_${Date.now()}_${Math.floor(Math.random() * 1000)}`;
+
       setState((prev) => {
         let finalPos = position;
         if (!finalPos) {
@@ -53,20 +56,38 @@ export function useTeacherMode(initialState?: Partial<TeacherState>) {
             finalPos = { x: 140, y: maxY + 40 };
           }
         }
-        const id = `arr_${Date.now()}`;
         const newArray: DSAArray = {
-          id,
+          id: arrayId,
           name: name || `arr_${prev.arrays.length + 1}`,
           elements: elements.length > 0 ? elements : [0],
           position: finalPos,
           cellWidth: 70,
           cellHeight: 56,
         };
+
+        const pointerNames = ["i", "j", "k", "left", "right", "mid"];
+        const pointerColors = ["#38bdf8", "#34d399", "#fbbf24", "#f87171", "#a78bfa"];
+        const usedNames = new Set(prev.pointers.map((p) => p.name));
+        const nextName =
+          pointerNames.find((n) => !usedNames.has(n)) || `p${prev.pointers.length + 1}`;
+        const nextColor = pointerColors[prev.pointers.length % pointerColors.length];
+
+        const newPointer: DSAPointer = {
+          id: pointerId,
+          name: nextName,
+          targetArrayId: arrayId,
+          index: 0,
+          color: nextColor,
+        };
+
         return {
           ...prev,
           arrays: [...prev.arrays, newArray],
+          pointers: [...prev.pointers, newPointer],
         };
       });
+
+      setActivePointerId(pointerId);
     },
     []
   );
@@ -225,6 +246,9 @@ export function useTeacherMode(initialState?: Partial<TeacherState>) {
         pointers: customState?.pointers ?? defaultInitialTeacherState.pointers,
         variables: customState?.variables ?? defaultInitialTeacherState.variables,
       });
+      setActivePointerId(
+        (customState?.pointers ?? defaultInitialTeacherState.pointers)[0]?.id ?? null
+      );
     },
     []
   );

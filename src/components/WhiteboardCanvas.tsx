@@ -368,7 +368,9 @@ export const WhiteboardCanvas: React.FC<WhiteboardCanvasProps> = ({
         const selectedCell = elements.find(
           (el) =>
             selectedIds.includes(el.id) &&
-            (el.customData?.dsaType === "cell" || el.customData?.dsaType === "valueText")
+            (el.customData?.dsaType === "cell" ||
+              el.customData?.dsaType === "valueText" ||
+              el.customData?.dsaType === "indexLabel")
         );
         const selectedKey = selectedCell
           ? `${selectedCell.customData.arrayId}_${selectedCell.customData.index}`
