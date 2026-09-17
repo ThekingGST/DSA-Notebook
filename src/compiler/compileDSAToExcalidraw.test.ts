@@ -40,19 +40,23 @@ describe("compileDSAToExcalidraw", () => {
     expect(cell0?.groupIds).toEqual(["group_A"]);
     expect(cell0?.customData).toEqual({ dsaType: "cell", arrayId: "A", index: 0 });
 
-    // Check value text
+    // Check value text (centered inside cell bounding box with containerId binding)
     const val0 = elements.find((e) => e.id === "val_A_0");
     expect(val0).toBeDefined();
     expect(val0?.type).toBe("text");
     expect(val0?.text).toBe("10");
-    expect(val0?.x).toBe(100 + 32);
+    expect(val0?.x).toBe(100);
+    expect(val0?.y).toBe(200);
+    expect(val0?.containerId).toBe("cell_A_0");
     expect(val0?.groupIds).toEqual(["group_A"]);
 
-    // Check index label
+    // Check index label (aligned under cell)
     const idx0 = elements.find((e) => e.id === "idx_A_0");
     expect(idx0).toBeDefined();
     expect(idx0?.type).toBe("text");
     expect(idx0?.text).toBe("0");
+    expect(idx0?.x).toBe(100);
+    expect(idx0?.y).toBe(200 + 54 + 8);
     expect(idx0?.groupIds).toEqual(["group_A"]);
   });
 

@@ -1,4 +1,4 @@
-import React, { useMemo } from "react";
+import React, { useEffect, useState } from "react";
 import { Excalidraw } from "@excalidraw/excalidraw";
 import "@excalidraw/excalidraw/index.css";
 import "./WhiteboardCanvas.css";
@@ -14,17 +14,20 @@ export const WhiteboardCanvas: React.FC<WhiteboardCanvasProps> = ({
   mode,
   initialElements = [],
 }) => {
-  const initialData = useMemo(
-    () => ({
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      elements: initialElements as any,
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const [excalidrawAPI, setExcalidrawAPI] = useState<any>(null);
+
+  useEffect(() => {
+    if (!excalidrawAPI) return;
+
+    excalidrawAPI.updateScene({
+      elements: initialElements,
       appState: {
-        theme: "dark" as const,
-        viewBackgroundColor: "#18181b",
+        theme: "dark",
+        viewBackgroundColor: "#121214",
       },
-    }),
-    [initialElements]
-  );
+    });
+  }, [excalidrawAPI, initialElements]);
 
   return (
     <div
@@ -34,7 +37,15 @@ export const WhiteboardCanvas: React.FC<WhiteboardCanvasProps> = ({
     >
       <Excalidraw
         theme="dark"
-        initialData={initialData}
+        excalidrawAPI={(api) => setExcalidrawAPI(api)}
+        initialData={{
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          elements: initialElements as any,
+          appState: {
+            theme: "dark",
+            viewBackgroundColor: "#121214",
+          },
+        }}
         UIOptions={{
           canvasActions: {
             loadScene: false,

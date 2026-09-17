@@ -22,7 +22,7 @@ export interface ExcalidrawCompiledElement {
   version: number;
   versionNonce: number;
   isDeleted: boolean;
-  boundElements: null;
+  boundElements: Array<{ id: string; type: "text" | "arrow" }> | null;
   updated: number;
   link: null;
   locked: boolean;
@@ -85,13 +85,16 @@ export function compileDSAToExcalidraw(dsaState: DSAState): ExcalidrawCompiledEl
 
   // 1. Compile 1D Arrays
   arrays.forEach((arr) => {
-    const cellW = arr.cellWidth || 64;
-    const cellH = arr.cellHeight || 54;
+    const cellW = arr.cellWidth || 70;
+    const cellH = arr.cellHeight || 56;
     const groupId = `group_${arr.id}`;
 
     arr.elements.forEach((val, idx) => {
       const cellX = arr.position.x + idx * cellW;
       const cellY = arr.position.y;
+      const cellId = `cell_${arr.id}_${idx}`;
+      const valTextId = `val_${arr.id}_${idx}`;
+      const idxTextId = `idx_${arr.id}_${idx}`;
 
       const isComparing =
         activeComparison &&
@@ -103,7 +106,7 @@ export function compileDSAToExcalidraw(dsaState: DSAState): ExcalidrawCompiledEl
       );
 
       let strokeColor = "#e1e1e6";
-      let backgroundColor = "rgba(255, 255, 255, 0.02)";
+      let backgroundColor = "rgba(255, 255, 255, 0.04)";
       let strokeWidth = 1.5;
 
       if (isComparing) {
@@ -112,13 +115,13 @@ export function compileDSAToExcalidraw(dsaState: DSAState): ExcalidrawCompiledEl
         strokeWidth = 2.5;
       } else if (customHighlight) {
         strokeColor = customHighlight.color;
-        backgroundColor = `${customHighlight.color}26`; // ~15% opacity hex
+        backgroundColor = `${customHighlight.color}26`;
         strokeWidth = 2.5;
       }
 
-      // Cell rectangle
+      // Cell rectangle container
       const cellEl = createBaseElement(
-        `cell_${arr.id}_${idx}`,
+        cellId,
         "rectangle",
         cellX,
         cellY,
@@ -130,15 +133,16 @@ export function compileDSAToExcalidraw(dsaState: DSAState): ExcalidrawCompiledEl
       cellEl.strokeColor = strokeColor;
       cellEl.backgroundColor = backgroundColor;
       cellEl.strokeWidth = strokeWidth;
+      cellEl.boundElements = [{ id: valTextId, type: "text" }];
       elements.push(cellEl);
 
-      // Cell value text (centered in cell)
+      // Cell value text (bound to cell container, matching cell bounds for perfect centering)
       const valText = String(val);
       const textEl = createBaseElement(
-        `val_${arr.id}_${idx}`,
+        valTextId,
         "text",
-        cellX + cellW / 2,
-        cellY + cellH / 2,
+        cellX,
+        cellY,
         cellW,
         cellH,
         [groupId],
@@ -151,15 +155,16 @@ export function compileDSAToExcalidraw(dsaState: DSAState): ExcalidrawCompiledEl
       textEl.textAlign = "center";
       textEl.verticalAlign = "middle";
       textEl.strokeColor = "#ffffff";
+      textEl.containerId = cellId;
       elements.push(textEl);
 
-      // Sub-cell index label
+      // Sub-cell index label (centered below cell)
       const idxText = String(idx);
       const idxEl = createBaseElement(
-        `idx_${arr.id}_${idx}`,
+        idxTextId,
         "text",
-        cellX + cellW / 2,
-        cellY + cellH + 16,
+        cellX,
+        cellY + cellH + 8,
         cellW,
         20,
         [groupId],
@@ -171,7 +176,7 @@ export function compileDSAToExcalidraw(dsaState: DSAState): ExcalidrawCompiledEl
       idxEl.fontFamily = 1;
       idxEl.textAlign = "center";
       idxEl.verticalAlign = "middle";
-      idxEl.strokeColor = "#8d8d99";
+      idxEl.strokeColor = "#a1a1aa";
       elements.push(idxEl);
     });
   });
@@ -188,7 +193,7 @@ export function compileDSAToExcalidraw(dsaState: DSAState): ExcalidrawCompiledEl
     const targetArr = arrays.find((a) => a.id === p.targetArrayId);
     if (!targetArr) return;
 
-    const cellW = targetArr.cellWidth || 64;
+    const cellW = targetArr.cellWidth || 70;
     let cellCenterX: number;
 
     if (p.index === -1) {
@@ -201,16 +206,21 @@ export function compileDSAToExcalidraw(dsaState: DSAState): ExcalidrawCompiledEl
 
     const siblings = pointersByTarget[`${p.targetArrayId}_${p.index}`] || [p];
     const stackRank = siblings.indexOf(p);
-    const yOffset = 30 + stackRank * 26;
-    const pointerY = targetArr.position.y - yOffset;
+
+    const ptrWidth = 70;
+    const ptrHeight = 44;
+    // Position pointer above cell, leaving 8px gap above cell border
+    const pointerY = targetArr.position.y - 8 - ptrHeight - stackRank * (ptrHeight + 6);
+    // Center pointer bounding box horizontally over cell center
+    const pointerX = Math.round(cellCenterX - ptrWidth / 2);
 
     const ptrEl = createBaseElement(
       `ptr_${p.id}`,
       "text",
-      cellCenterX,
+      pointerX,
       pointerY,
-      60,
-      28,
+      ptrWidth,
+      ptrHeight,
       [`group_${targetArr.id}`],
       {
         dsaType: "pointer",
@@ -232,14 +242,14 @@ export function compileDSAToExcalidraw(dsaState: DSAState): ExcalidrawCompiledEl
 
   // 3. Compile Variables HUD
   if (variables && variables.length > 0) {
-    let vy = 100;
+    let vy = 150;
     variables.forEach((v) => {
       const varEl = createBaseElement(
         `var_${v.id}`,
         "text",
-        60,
-        vy,
         140,
+        vy,
+        180,
         24,
         ["variables_hud"],
         { dsaType: "variable", variableId: v.id }
@@ -260,10 +270,10 @@ export function compileDSAToExcalidraw(dsaState: DSAState): ExcalidrawCompiledEl
     const narrationEl = createBaseElement(
       "narration_card",
       "text",
-      60,
-      35,
-      400,
-      40,
+      140,
+      80,
+      450,
+      44,
       ["narration_group"],
       { dsaType: "narration" }
     );
@@ -272,7 +282,7 @@ export function compileDSAToExcalidraw(dsaState: DSAState): ExcalidrawCompiledEl
     narrationEl.originalText = text;
     narrationEl.fontSize = 15;
     narrationEl.fontFamily = 1;
-    narrationEl.strokeColor = "#e1e1e6";
+    narrationEl.strokeColor = "#f4f4f5";
     elements.push(narrationEl);
   }
 

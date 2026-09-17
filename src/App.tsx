@@ -11,22 +11,22 @@ const defaultDemoState: DSAState = {
       id: "A",
       name: "nums",
       elements: [10, 25, 7, 42, 18],
-      position: { x: 120, y: 240 },
-      cellWidth: 68,
+      position: { x: 140, y: 320 },
+      cellWidth: 70,
       cellHeight: 56,
     },
   ],
   pointers: [
-    { id: "p1", name: "i", targetArrayId: "A", index: 1, color: "#996dff" },
-    { id: "p2", name: "largest", targetArrayId: "A", index: 3, color: "#04d361" },
+    { id: "p1", name: "i", targetArrayId: "A", index: 1, color: "#a78bfa" },
+    { id: "p2", name: "largest", targetArrayId: "A", index: 3, color: "#34d399" },
   ],
   variables: [
-    { id: "v1", name: "max", value: 42, color: "#04d361" },
-    { id: "v2", name: "secondLargest", value: 25, color: "#f1b000" },
+    { id: "v1", name: "max", value: 42, color: "#34d399" },
+    { id: "v2", name: "secondLargest", value: 25, color: "#fbbf24" },
   ],
   narration: {
     title: "1D Array Demo Initialized",
-    text: "Pointers i and largest positioned along nums array.",
+    text: "Pointers i and largest positioned cleanly along nums array.",
   },
 };
 
