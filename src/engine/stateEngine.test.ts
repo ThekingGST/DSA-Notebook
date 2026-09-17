@@ -126,6 +126,37 @@ describe("dsaReducer", () => {
     expect(cleared.highlights).toEqual([]);
     expect(cleared.activeComparison).toBeNull();
   });
+
+  it("automatically adds green highlight on write_cell and swap actions", () => {
+    const writeResult = dsaReducer(baseState, {
+      type: "write_cell",
+      arrayId: "A",
+      index: 1,
+      value: 99,
+    });
+    expect(writeResult.highlights).toContainEqual({
+      arrayId: "A",
+      index: 1,
+      color: "#04d361",
+    });
+
+    const swapResult = dsaReducer(baseState, {
+      type: "swap",
+      arrayId: "A",
+      indexA: 0,
+      indexB: 2,
+    });
+    expect(swapResult.highlights).toContainEqual({
+      arrayId: "A",
+      index: 0,
+      color: "#04d361",
+    });
+    expect(swapResult.highlights).toContainEqual({
+      arrayId: "A",
+      index: 2,
+      color: "#04d361",
+    });
+  });
 });
 
 describe("computeSnapshots & DSAStateEngine", () => {
