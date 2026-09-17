@@ -82,6 +82,13 @@ const canonicalTrace: ExecutionTrace = {
 export const App: React.FC = () => {
   const [mode, setMode] = useState<WorkspaceMode>("student");
 
+  const initialStep = useMemo(() => {
+    if (typeof window === "undefined") return 0;
+    const params = new URLSearchParams(window.location.search);
+    const s = parseInt(params.get("step") || "0", 10);
+    return isNaN(s) ? 0 : s;
+  }, []);
+
   const {
     currentStep,
     totalSteps,
@@ -90,7 +97,7 @@ export const App: React.FC = () => {
     stepTo,
     togglePlay,
     reset,
-  } = useAlgorithmPlayback(canonicalTrace);
+  } = useAlgorithmPlayback(canonicalTrace, { initialStep });
 
   const compiledElements = useMemo(() => {
     return compileDSAToExcalidraw(currentState);

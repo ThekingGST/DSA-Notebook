@@ -46,7 +46,7 @@ describe("compileDSAToExcalidraw", () => {
     expect(val0?.type).toBe("text");
     expect(val0?.text).toBe("10");
     expect(val0?.x).toBe(100);
-    expect(val0?.y).toBe(200);
+    expect(val0?.y).toBe(200 + (54 - 28) / 2); // vertically centered inside cell
     expect(val0?.containerId).toBe("cell_A_0");
     expect(val0?.groupIds).toEqual(["group_A"]);
     expect(val0?.lineHeight).toBe(1.25);

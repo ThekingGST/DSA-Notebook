@@ -24,7 +24,7 @@ export const WhiteboardCanvas: React.FC<WhiteboardCanvasProps> = ({
       elements: initialElements,
       appState: {
         theme: "dark",
-        viewBackgroundColor: "#121214",
+        viewBackgroundColor: "#ffffff",
       },
     });
   }, [excalidrawAPI, initialElements]);
@@ -43,7 +43,7 @@ export const WhiteboardCanvas: React.FC<WhiteboardCanvasProps> = ({
           elements: initialElements as any,
           appState: {
             theme: "dark",
-            viewBackgroundColor: "#121214",
+            viewBackgroundColor: "#ffffff",
           },
         }}
         UIOptions={{

@@ -4,21 +4,34 @@ import { DSAStateEngine } from "../engine/stateEngine";
 
 interface UseAlgorithmPlaybackOptions {
   stepIntervalMs?: number;
+  initialStep?: number;
 }
 
 export function useAlgorithmPlayback(
   trace: ExecutionTrace,
   options: UseAlgorithmPlaybackOptions = {}
 ) {
-  const { stepIntervalMs = 1000 } = options;
-  const engineRef = useRef<DSAStateEngine>(new DSAStateEngine(trace));
+  const { stepIntervalMs = 1000, initialStep = 0 } = options;
+  const engineRef = useRef<DSAStateEngine>(
+    (() => {
+      const engine = new DSAStateEngine(trace);
+      if (initialStep > 0) {
+        engine.stepTo(initialStep);
+      }
+      return engine;
+    })()
+  );
 
   // Re-initialize engine if trace reference changes
   useEffect(() => {
     engineRef.current.loadTrace(trace);
-  }, [trace]);
+    if (initialStep > 0) {
+      engineRef.current.stepTo(initialStep);
+      setCurrentStep(engineRef.current.getCurrentStepIndex());
+    }
+  }, [trace, initialStep]);
 
-  const [currentStep, setCurrentStep] = useState(0);
+  const [currentStep, setCurrentStep] = useState(initialStep);
   const [isPlaying, setIsPlaying] = useState(false);
   const [isRapidStepping, setIsRapidStepping] = useState(false);
   const lastStepTimeRef = useRef<number>(0);

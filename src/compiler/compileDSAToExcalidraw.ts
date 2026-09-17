@@ -135,7 +135,7 @@ export function compileDSAToExcalidraw(dsaState: DSAState): ExcalidrawCompiledEl
       );
 
       let strokeColor = "#1e1e1e";
-      let backgroundColor = "#ffffff";
+      let backgroundColor = "rgba(255, 255, 255, 0.05)";
       let strokeWidth = 2;
 
       if (isComparing) {
@@ -165,15 +165,17 @@ export function compileDSAToExcalidraw(dsaState: DSAState): ExcalidrawCompiledEl
       cellEl.boundElements = [{ id: valTextId, type: "text" }];
       elements.push(cellEl);
 
-      // Cell value text (bound to cell container, matching cell bounds for perfect centering)
+      // Cell value text (vertically centered inside cell)
       const valText = String(val);
+      const textH = 28;
+      const textY = Math.round(cellY + (cellH - textH) / 2);
       const textEl = createBaseElement(
         valTextId,
         "text",
         cellX,
-        cellY,
+        textY,
         cellW,
-        cellH,
+        textH,
         [groupId],
         { dsaType: "valueText", arrayId: arr.id, index: idx }
       );
@@ -321,7 +323,7 @@ export function compileDSAToExcalidraw(dsaState: DSAState): ExcalidrawCompiledEl
     narrationEl.lineHeight = 1.35 as any;
     narrationEl.textAlign = "left";
     narrationEl.verticalAlign = "top";
-    narrationEl.strokeColor = "#18181b";
+    narrationEl.strokeColor = "#1e1e1e";
     elements.push(narrationEl);
   }
 
