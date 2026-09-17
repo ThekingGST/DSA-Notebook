@@ -125,5 +125,56 @@ describe("WhiteboardCanvas component", () => {
     expect(rafSpy).toHaveBeenCalled();
     rafSpy.mockRestore();
   });
+
+  it("cancels in-flight smooth glide and snaps immediately when rapid stepping interrupts", () => {
+    mockUpdateScene = vi.fn();
+    const cancelSpy = vi.spyOn(window, "cancelAnimationFrame");
+
+    const state0 = {
+      arrays: [{ id: "A", name: "nums", elements: [10, 20, 30], position: { x: 100, y: 200 } }],
+      pointers: [{ id: "p1", name: "i", targetArrayId: "A", index: 0 }],
+      variables: [],
+    };
+    const state1 = {
+      ...state0,
+      pointers: [{ id: "p1", name: "i", targetArrayId: "A", index: 1 }],
+    };
+    const state2 = {
+      ...state0,
+      pointers: [{ id: "p1", name: "i", targetArrayId: "A", index: 2 }],
+    };
+
+    const elements0 = compileDSAToExcalidraw(state0);
+    const elements1 = compileDSAToExcalidraw(state1);
+    const elements2 = compileDSAToExcalidraw(state2);
+
+    const { rerender } = render(
+      <WhiteboardCanvas mode="student" initialElements={elements0} isRapidStepping={false} />
+    );
+
+    // Step 1: starts gliding
+    rerender(
+      <WhiteboardCanvas mode="student" initialElements={elements1} isRapidStepping={false} />
+    );
+
+    cancelSpy.mockClear();
+    mockUpdateScene.mockClear();
+
+    // Step 2: rapid step interrupts
+    rerender(
+      <WhiteboardCanvas mode="student" initialElements={elements2} isRapidStepping={true} />
+    );
+
+    // In-flight animation frame should be cancelled
+    expect(cancelSpy).toHaveBeenCalled();
+    // Step 2 elements should be committed immediately
+    expect(mockUpdateScene).toHaveBeenCalledWith(
+      expect.objectContaining({
+        elements: elements2,
+      })
+    );
+
+    cancelSpy.mockRestore();
+  });
 });
 
