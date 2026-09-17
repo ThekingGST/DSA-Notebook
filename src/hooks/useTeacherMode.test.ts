@@ -251,6 +251,36 @@ describe("useTeacherMode hook", () => {
     expect(arr2Pointer?.index).toBe(0);
     expect(arr2Pointer?.name).toBe("j");
     expect(result.current.activePointerId).toBe(arr2Pointer?.id);
+    expect(result.current.activePointersByArray[arr2Pointer!.targetArrayId]).toBe(arr2Pointer?.id);
+  });
+
+  it("tracks and isolates active pointers per array", () => {
+    const { result } = renderHook(() =>
+      useTeacherMode({
+        arrays: [
+          { id: "A1", name: "nums1", elements: [1, 2], position: { x: 100, y: 100 } },
+          { id: "A2", name: "nums2", elements: [3, 4], position: { x: 100, y: 250 } },
+        ],
+        pointers: [
+          { id: "ptr_i", name: "i", targetArrayId: "A1", index: 0, color: "#a78bfa" },
+          { id: "ptr_j", name: "j", targetArrayId: "A2", index: 0, color: "#38bdf8" },
+        ],
+        variables: [],
+      })
+    );
+
+    expect(result.current.activePointersByArray["A1"]).toBe("ptr_i");
+    expect(result.current.activePointersByArray["A2"]).toBe("ptr_j");
+
+    // Add a second pointer to Array 1
+    act(() => {
+      result.current.addPointer("A1", "left", 1);
+    });
+
+    expect(result.current.activePointersByArray["A1"]).toMatch(/^ptr_/);
+    expect(result.current.activePointersByArray["A1"]).not.toBe("ptr_i");
+    // Array 2's active pointer is completely unaffected
+    expect(result.current.activePointersByArray["A2"]).toBe("ptr_j");
   });
 });
 

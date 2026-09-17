@@ -35,6 +35,25 @@ export function useTeacherMode(initialState?: Partial<TeacherState>) {
     () => (initialState?.pointers ?? defaultInitialTeacherState.pointers)[0]?.id ?? null
   );
 
+  const [activePointersByArray, setActivePointersByArray] = useState<Record<string, string>>(() => {
+    const initialPointers = initialState?.pointers ?? defaultInitialTeacherState.pointers;
+    const map: Record<string, string> = {};
+    initialPointers.forEach((p) => {
+      if (!map[p.targetArrayId]) {
+        map[p.targetArrayId] = p.id;
+      }
+    });
+    return map;
+  });
+
+  const setActivePointerForArray = useCallback((arrayId: string, pointerId: string) => {
+    setActivePointerId(pointerId);
+    setActivePointersByArray((prev) => ({
+      ...prev,
+      [arrayId]: pointerId,
+    }));
+  }, []);
+
   const addArray = useCallback(
     (
       name: string,
@@ -88,6 +107,10 @@ export function useTeacherMode(initialState?: Partial<TeacherState>) {
       });
 
       setActivePointerId(pointerId);
+      setActivePointersByArray((prev) => ({
+        ...prev,
+        [arrayId]: pointerId,
+      }));
     },
     []
   );
@@ -203,15 +226,21 @@ export function useTeacherMode(initialState?: Partial<TeacherState>) {
         pointers: [...prev.pointers, newPointer],
       }));
       setActivePointerId(id);
+      setActivePointersByArray((prev) => ({
+        ...prev,
+        [arrayId]: id,
+      }));
     },
     []
   );
 
   const movePointer = useCallback(
     (pointerId: string, targetIndex: number) => {
+      let targetArrayId: string | undefined;
       setState((prev) => {
         const ptr = prev.pointers.find((p) => p.id === pointerId);
         if (!ptr) return prev;
+        targetArrayId = ptr.targetArrayId;
         const targetArr = prev.arrays.find((a) => a.id === ptr.targetArrayId);
         const maxIndex = targetArr ? targetArr.elements.length : 0;
         const clamped = Math.max(-1, Math.min(maxIndex, targetIndex));
@@ -224,6 +253,12 @@ export function useTeacherMode(initialState?: Partial<TeacherState>) {
         };
       });
       setActivePointerId(pointerId);
+      if (targetArrayId) {
+        setActivePointersByArray((prev) => ({
+          ...prev,
+          [targetArrayId!]: pointerId,
+        }));
+      }
     },
     []
   );
@@ -241,14 +276,22 @@ export function useTeacherMode(initialState?: Partial<TeacherState>) {
 
   const resetTeacherState = useCallback(
     (customState?: Partial<TeacherState>) => {
+      const resetPointers = customState?.pointers ?? defaultInitialTeacherState.pointers;
       setState({
         arrays: customState?.arrays ?? defaultInitialTeacherState.arrays,
-        pointers: customState?.pointers ?? defaultInitialTeacherState.pointers,
+        pointers: resetPointers,
         variables: customState?.variables ?? defaultInitialTeacherState.variables,
       });
       setActivePointerId(
-        (customState?.pointers ?? defaultInitialTeacherState.pointers)[0]?.id ?? null
+        resetPointers[0]?.id ?? null
       );
+      const map: Record<string, string> = {};
+      resetPointers.forEach((p) => {
+        if (!map[p.targetArrayId]) {
+          map[p.targetArrayId] = p.id;
+        }
+      });
+      setActivePointersByArray(map);
     },
     []
   );
@@ -268,6 +311,8 @@ export function useTeacherMode(initialState?: Partial<TeacherState>) {
     dsaState,
     activePointerId,
     setActivePointerId,
+    activePointersByArray,
+    setActivePointerForArray,
     addArray,
     updateArrayPosition,
     updateCellValue,

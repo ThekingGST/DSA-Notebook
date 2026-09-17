@@ -119,6 +119,8 @@ export const App: React.FC = () => {
     dsaState: teacherState,
     activePointerId,
     setActivePointerId,
+    activePointersByArray,
+    setActivePointerForArray,
     addArray,
     updateArrayPosition,
     updateCellValue,
@@ -163,19 +165,28 @@ export const App: React.FC = () => {
             isRapidStepping={isRapidStepping}
             onCellDoubleClick={setActiveEdit}
             onPointerSnap={movePointer}
-            onPointerSelect={setActivePointerId}
+            onPointerSelect={(ptrId) => {
+              setActivePointerId(ptrId);
+              const ptr = teacherRawState.pointers.find((p) => p.id === ptrId);
+              if (ptr) {
+                setActivePointerForArray(ptr.targetArrayId, ptrId);
+              }
+            }}
             onArrayMove={updateArrayPosition}
             onViewportChange={mode === "teacher" ? setViewport : undefined}
             onCellClick={(arrayId, index) => {
               const arrPointers = teacherRawState.pointers.filter(
                 (p) => p.targetArrayId === arrayId
               );
+              const activePtrForArray = activePointersByArray[arrayId];
               const targetPointer =
-                arrPointers.find((p) => p.id === activePointerId) || arrPointers[0];
+                arrPointers.find((p) => p.id === activePtrForArray) ||
+                arrPointers.find((p) => p.id === activePointerId) ||
+                arrPointers[0];
 
               if (targetPointer) {
                 movePointer(targetPointer.id, index);
-                setActivePointerId(targetPointer.id);
+                setActivePointerForArray(arrayId, targetPointer.id);
               } else {
                 // If this array doesn't have a pointer yet, attach one directly to this cell
                 const pointerNames = ["i", "j", "k", "left", "right", "mid"];
@@ -210,6 +221,7 @@ export const App: React.FC = () => {
                 arrays={teacherRawState.arrays}
                 pointers={teacherRawState.pointers}
                 activePointerId={activePointerId}
+                activePointersByArray={activePointersByArray}
                 scrollX={viewport.scrollX}
                 scrollY={viewport.scrollY}
                 zoom={viewport.zoom}

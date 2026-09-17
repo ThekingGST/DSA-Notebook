@@ -6,6 +6,7 @@ export interface ArrayEndControlsProps {
   arrays: DSAArray[];
   pointers?: DSAPointer[];
   activePointerId?: string | null;
+  activePointersByArray?: Record<string, string>;
   scrollX?: number;
   scrollY?: number;
   zoom?: number;
@@ -19,6 +20,7 @@ export const ArrayEndControls: React.FC<ArrayEndControlsProps> = ({
   arrays,
   pointers = [],
   activePointerId,
+  activePointersByArray,
   scrollX = 0,
   scrollY = 0,
   zoom = 1,
@@ -37,8 +39,10 @@ export const ArrayEndControls: React.FC<ArrayEndControlsProps> = ({
 
         const arrPointers = pointers.filter((p) => p.targetArrayId === arr.id);
         const hasPointers = arrPointers.length > 0;
+        const activePtrId =
+          (activePointersByArray && activePointersByArray[arr.id]) || activePointerId;
         const activePtr =
-          arrPointers.find((p) => p.id === activePointerId) || arrPointers[0];
+          arrPointers.find((p) => p.id === activePtrId) || arrPointers[0];
 
         let screenX: number;
         let screenY: number;

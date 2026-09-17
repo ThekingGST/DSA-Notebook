@@ -37,6 +37,7 @@ export const WhiteboardCanvas: React.FC<WhiteboardCanvasProps> = ({
   const currentPointersRef = useRef<Map<string, { x: number; y: number }>>(new Map());
   const animFrameRef = useRef<number | null>(null);
   const lastKnownPointerPositionsRef = useRef<Map<string, number>>(new Map());
+  const lastKnownPointerCanvasCoordsRef = useRef<Map<string, { x: number; y: number }>>(new Map());
   const lastKnownArrayPositionsRef = useRef<Map<string, { x: number; y: number }>>(new Map());
   const lastViewportRef = useRef({ scrollX: 0, scrollY: 0, zoom: 1 });
   const lastSelectedCellRef = useRef<string | null>(null);
@@ -77,6 +78,7 @@ export const WhiteboardCanvas: React.FC<WhiteboardCanvasProps> = ({
       if (el.customData?.dsaType === "pointer") {
         const pointerId = (el.customData.pointerId as string) || el.id.replace(/^ptr_/, "");
         lastKnownPointerPositionsRef.current.set(pointerId, (el.customData.index as number) ?? 0);
+        lastKnownPointerCanvasCoordsRef.current.set(pointerId, { x: el.x, y: el.y });
       }
     });
   }, [initialElements]);
@@ -316,6 +318,8 @@ export const WhiteboardCanvas: React.FC<WhiteboardCanvasProps> = ({
 
     // Track pointer movement and snapping on release
     if (onPointerSnap && !animFrameRef.current && !isDragging) {
+      const selectedIds = Object.keys(appState.selectedElementIds || {});
+
       elements.forEach((el) => {
         if (el.customData?.dsaType === "pointer") {
           const pointerId = (el.customData.pointerId as string) || el.id.replace(/^ptr_/, "");
@@ -331,17 +335,43 @@ export const WhiteboardCanvas: React.FC<WhiteboardCanvasProps> = ({
             const cellW = cell0.width || 70;
             const ptrCenterX = el.x + (el.width || 70) / 2;
 
-            // Calculate closest cell index relative to cell 0 center
-            const rawIdx = Math.round((ptrCenterX - cell0.x - cellW / 2) / cellW);
-            const maxIdx = arrayCells.length;
-            const snappedIdx = Math.max(-1, Math.min(maxIdx, rawIdx));
+            // Check if the target array itself moved
+            const lastArrPos = lastKnownArrayPositionsRef.current.get(targetArrayId);
+            const isArrayMoving = Boolean(
+              lastArrPos &&
+              (Math.abs(lastArrPos.x - cell0.x) > 1 || Math.abs(lastArrPos.y - cell0.y) > 1)
+            );
 
-            const lastPos = lastKnownPointerPositionsRef.current.get(pointerId);
-            if (lastPos !== undefined && lastPos !== snappedIdx) {
-              lastKnownPointerPositionsRef.current.set(pointerId, snappedIdx);
-              onPointerSnap(pointerId, snappedIdx);
-            } else if (lastPos === undefined) {
-              lastKnownPointerPositionsRef.current.set(pointerId, snappedIdx);
+            // Check if this pointer itself was moved on canvas
+            const lastCanvasPos = lastKnownPointerCanvasCoordsRef.current.get(pointerId);
+            const isPointerMoving = Boolean(
+              lastCanvasPos &&
+              (Math.abs(lastCanvasPos.x - el.x) > 3 || Math.abs(lastCanvasPos.y - el.y) > 3)
+            );
+
+            const isPointerSelected = selectedIds.includes(el.id);
+
+            // Strictly isolate pointer snapping: ONLY snap if the pointer itself was moved/dragged
+            // while the array was NOT being moved. If the array is moving, pointer index is locked.
+            if ((isPointerMoving && !isArrayMoving) || (isPointerSelected && !isArrayMoving)) {
+              // Calculate closest cell index relative to cell 0 center
+              const rawIdx = Math.round((ptrCenterX - cell0.x - cellW / 2) / cellW);
+              const maxIdx = arrayCells.length;
+              const snappedIdx = Math.max(-1, Math.min(maxIdx, rawIdx));
+
+              const lastPos = lastKnownPointerPositionsRef.current.get(pointerId);
+              if (lastPos !== undefined && lastPos !== snappedIdx) {
+                lastKnownPointerPositionsRef.current.set(pointerId, snappedIdx);
+                lastKnownPointerCanvasCoordsRef.current.set(pointerId, { x: el.x, y: el.y });
+                onPointerSnap(pointerId, snappedIdx);
+              } else if (lastPos === undefined) {
+                lastKnownPointerPositionsRef.current.set(pointerId, snappedIdx);
+                lastKnownPointerCanvasCoordsRef.current.set(pointerId, { x: el.x, y: el.y });
+              }
+            } else if (isArrayMoving) {
+              // Array moved: lock the pointer index to its existing value, do not snap
+              const currentIndex = (el.customData?.index as number) ?? 0;
+              lastKnownPointerPositionsRef.current.set(pointerId, currentIndex);
             }
           }
         }
