@@ -21,6 +21,10 @@ export function dsaReducer(state: DSAState, action: AlgorithmStepAction): DSASta
     case "swap": {
       return {
         ...state,
+        highlights: [
+          { arrayId: action.arrayId, index: action.indexA, color: "#04d361" },
+          { arrayId: action.arrayId, index: action.indexB, color: "#04d361" },
+        ],
         arrays: state.arrays.map((arr) => {
           if (arr.id !== action.arrayId) return arr;
           const nextElements = [...arr.elements];
@@ -35,6 +39,9 @@ export function dsaReducer(state: DSAState, action: AlgorithmStepAction): DSASta
     case "write_cell": {
       return {
         ...state,
+        highlights: [
+          { arrayId: action.arrayId, index: action.index, color: "#04d361" },
+        ],
         arrays: state.arrays.map((arr) => {
           if (arr.id !== action.arrayId) return arr;
           const nextElements = [...arr.elements];
@@ -114,11 +121,15 @@ export function computeSnapshots(trace: ExecutionTrace): ComputedSnapshot[] {
   // Snapshot 0: Initial State
   snapshots.push({
     stepIndex: 0,
-    title: "Initial State",
-    explanation: "Algorithm loaded at initial state.",
+    title: trace.initialState.narration?.title || "Initial State",
+    explanation:
+      trace.initialState.narration?.text || "Algorithm loaded at initial state.",
     state: {
       ...trace.initialState,
-      narration: { title: "Initial State", text: "Algorithm initialized." },
+      narration: trace.initialState.narration || {
+        title: "Initial State",
+        text: "Algorithm initialized.",
+      },
     },
   });
 

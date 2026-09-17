@@ -37,6 +37,7 @@ export interface ExcalidrawCompiledElement {
   containerId?: string | null;
   originalText?: string;
   lineHeight?: number;
+  autoResize?: boolean;
 }
 
 function createBaseElement(
@@ -49,7 +50,7 @@ function createBaseElement(
   groupIds: string[],
   customData: Record<string, unknown>
 ): ExcalidrawCompiledElement {
-  return {
+  const el: ExcalidrawCompiledElement = {
     id,
     type,
     x,
@@ -57,7 +58,7 @@ function createBaseElement(
     width,
     height,
     angle: 0,
-    strokeColor: "#e1e1e6",
+    strokeColor: "#1e1e1e",
     backgroundColor: "transparent",
     fillStyle: "solid",
     strokeWidth: 1.5,
@@ -68,8 +69,8 @@ function createBaseElement(
     frameId: null,
     roundness: type === "rectangle" ? { type: 3 } : null,
     seed: Math.floor(Math.random() * 100000),
-    version: 1,
-    versionNonce: 1,
+    version: Date.now(),
+    versionNonce: Math.floor(Math.random() * 100000),
     isDeleted: false,
     boundElements: null,
     updated: Date.now(),
@@ -77,6 +78,34 @@ function createBaseElement(
     locked: false,
     customData,
   };
+
+  if (type === "text") {
+    el.lineHeight = 1.25 as any;
+    el.autoResize = true;
+    el.baseline = 14;
+    el.textAlign = "center";
+    el.verticalAlign = "middle";
+  }
+
+  return el;
+}
+
+function wrapText(text: string, maxCharsPerLine = 48): string {
+  const words = text.split(" ");
+  const lines: string[] = [];
+  let currentLine = "";
+
+  for (const word of words) {
+    if (!word) continue;
+    if (currentLine.length + word.length + 1 <= maxCharsPerLine) {
+      currentLine += (currentLine ? " " : "") + word;
+    } else {
+      if (currentLine) lines.push(currentLine);
+      currentLine = word;
+    }
+  }
+  if (currentLine) lines.push(currentLine);
+  return lines.join("\n");
 }
 
 export function compileDSAToExcalidraw(dsaState: DSAState): ExcalidrawCompiledElement[] {
@@ -105,13 +134,13 @@ export function compileDSAToExcalidraw(dsaState: DSAState): ExcalidrawCompiledEl
         (h) => h.arrayId === arr.id && h.index === idx
       );
 
-      let strokeColor = "#e1e1e6";
-      let backgroundColor = "rgba(255, 255, 255, 0.04)";
-      let strokeWidth = 1.5;
+      let strokeColor = "#1e1e1e";
+      let backgroundColor = "rgba(255, 255, 255, 0.05)";
+      let strokeWidth = 2;
 
       if (isComparing) {
-        strokeColor = "#f1b000"; // amber
-        backgroundColor = "rgba(241, 176, 0, 0.15)";
+        strokeColor = "#d97706"; // amber
+        backgroundColor = "rgba(241, 176, 0, 0.2)";
         strokeWidth = 2.5;
       } else if (customHighlight) {
         strokeColor = customHighlight.color;
@@ -136,15 +165,17 @@ export function compileDSAToExcalidraw(dsaState: DSAState): ExcalidrawCompiledEl
       cellEl.boundElements = [{ id: valTextId, type: "text" }];
       elements.push(cellEl);
 
-      // Cell value text (bound to cell container, matching cell bounds for perfect centering)
+      // Cell value text (vertically centered inside cell)
       const valText = String(val);
+      const textH = 28;
+      const textY = Math.round(cellY + (cellH - textH) / 2);
       const textEl = createBaseElement(
         valTextId,
         "text",
         cellX,
-        cellY,
+        textY,
         cellW,
-        cellH,
+        textH,
         [groupId],
         { dsaType: "valueText", arrayId: arr.id, index: idx }
       );
@@ -154,7 +185,7 @@ export function compileDSAToExcalidraw(dsaState: DSAState): ExcalidrawCompiledEl
       textEl.fontFamily = 1;
       textEl.textAlign = "center";
       textEl.verticalAlign = "middle";
-      textEl.strokeColor = "#ffffff";
+      textEl.strokeColor = "#1e1e1e";
       textEl.containerId = cellId;
       elements.push(textEl);
 
@@ -176,7 +207,7 @@ export function compileDSAToExcalidraw(dsaState: DSAState): ExcalidrawCompiledEl
       idxEl.fontFamily = 1;
       idxEl.textAlign = "center";
       idxEl.verticalAlign = "middle";
-      idxEl.strokeColor = "#a1a1aa";
+      idxEl.strokeColor = "#52525b";
       elements.push(idxEl);
     });
   });
@@ -267,24 +298,35 @@ export function compileDSAToExcalidraw(dsaState: DSAState): ExcalidrawCompiledEl
 
   // 4. Compile Step Narration Card
   if (narration && narration.title) {
+    const wrappedExplanation = narration.text ? wrapText(narration.text, 52) : "";
+    const fullText = wrappedExplanation
+      ? `${narration.title}\n${wrappedExplanation}`
+      : narration.title;
+
+    const lineCount = fullText.split("\n").length;
+    const cardHeight = Math.max(44, lineCount * 22 + 6);
+
     const narrationEl = createBaseElement(
       "narration_card",
       "text",
       140,
-      80,
-      450,
-      44,
+      68,
+      520,
+      cardHeight,
       ["narration_group"],
       { dsaType: "narration" }
     );
-    const text = `📝 ${narration.title}\n${narration.text || ""}`;
-    narrationEl.text = text;
-    narrationEl.originalText = text;
+    narrationEl.text = fullText;
+    narrationEl.originalText = fullText;
     narrationEl.fontSize = 15;
     narrationEl.fontFamily = 1;
-    narrationEl.strokeColor = "#f4f4f5";
+    narrationEl.lineHeight = 1.35 as any;
+    narrationEl.textAlign = "left";
+    narrationEl.verticalAlign = "top";
+    narrationEl.strokeColor = "#1e1e1e";
     elements.push(narrationEl);
   }
 
   return elements;
 }
+
