@@ -12,6 +12,9 @@ export interface WhiteboardCanvasProps {
   isRapidStepping?: boolean;
   onCellDoubleClick?: (edit: ActiveCellEdit) => void;
   onPointerSnap?: (pointerId: string, targetIndex: number) => void;
+  onArrayMove?: (arrayId: string, position: { x: number; y: number }) => void;
+  onCellClick?: (arrayId: string, index: number) => void;
+  onViewportChange?: (viewport: { scrollX: number; scrollY: number; zoom: number }) => void;
 }
 
 export const WhiteboardCanvas: React.FC<WhiteboardCanvasProps> = ({
@@ -20,6 +23,9 @@ export const WhiteboardCanvas: React.FC<WhiteboardCanvasProps> = ({
   isRapidStepping = false,
   onCellDoubleClick,
   onPointerSnap,
+  onArrayMove,
+  onCellClick,
+  onViewportChange,
 }) => {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const [excalidrawAPI, setExcalidrawAPI] = useState<any>(null);
@@ -29,6 +35,7 @@ export const WhiteboardCanvas: React.FC<WhiteboardCanvasProps> = ({
   const currentPointersRef = useRef<Map<string, { x: number; y: number }>>(new Map());
   const animFrameRef = useRef<number | null>(null);
   const lastKnownPointerPositionsRef = useRef<Map<string, number>>(new Map());
+  const lastKnownArrayPositionsRef = useRef<Map<string, { x: number; y: number }>>(new Map());
 
   const commitScene = useCallback(
     (elements: ExcalidrawCompiledElement[]) => {
@@ -43,16 +50,21 @@ export const WhiteboardCanvas: React.FC<WhiteboardCanvasProps> = ({
         nonDsaElements = [];
       }
 
+      const currentAppState = excalidrawAPI.getAppState?.() || {};
       excalidrawAPI.updateScene({
         elements: [...nonDsaElements, ...elements],
         appState: {
           theme: "dark",
           viewBackgroundColor: "#ffffff",
+          scrollX: currentAppState.scrollX,
+          scrollY: currentAppState.scrollY,
+          zoom: currentAppState.zoom,
         },
       });
     },
     [excalidrawAPI]
   );
+
 
   useEffect(() => {
     if (!excalidrawAPI) return;
@@ -163,7 +175,7 @@ export const WhiteboardCanvas: React.FC<WhiteboardCanvasProps> = ({
   }, [excalidrawAPI, initialElements, isRapidStepping, commitScene]);
 
   // Handle double clicking a cell in Teacher Mode for in-place editing
-  const handleDoubleClick = (e: React.MouseEvent<HTMLDivElement>) => {
+  const handleDoubleClick = () => {
     if (mode !== "teacher" || !excalidrawAPI || !onCellDoubleClick) return;
 
     try {
@@ -193,9 +205,9 @@ export const WhiteboardCanvas: React.FC<WhiteboardCanvasProps> = ({
         const scrollX = appState.scrollX || 0;
         const scrollY = appState.scrollY || 0;
 
-        const rect = e.currentTarget.getBoundingClientRect();
-        const screenX = rect.left + (cellEl.x + scrollX) * zoom;
-        const screenY = rect.top + (cellEl.y + scrollY) * zoom;
+        // Position coordinates relative to viewport overlay
+        const screenX = (cellEl.x + scrollX) * zoom;
+        const screenY = (cellEl.y + scrollY) * zoom;
         const width = cellEl.width * zoom;
         const height = cellEl.height * zoom;
 
@@ -224,39 +236,95 @@ export const WhiteboardCanvas: React.FC<WhiteboardCanvasProps> = ({
   // Handle pointer dragging and snap cleanly to nearest cell on release
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const handleExcalidrawChange = (elements: readonly any[], appState: any) => {
-    if (mode !== "teacher" || !onPointerSnap) return;
+    if (!appState) return;
 
-    // Check if dragging has completed (no active drag)
-    const isDragging = appState?.draggingElement != null || appState?.cursorButton === "down";
+    if (onViewportChange) {
+      onViewportChange({
+        scrollX: appState.scrollX || 0,
+        scrollY: appState.scrollY || 0,
+        zoom: appState.zoom?.value || 1,
+      });
+    }
 
-    elements.forEach((el) => {
-      if (el.customData?.dsaType === "pointer") {
-        const pointerId = el.customData.pointerId || el.id.replace(/^ptr_/, "");
-        const targetArrayId = el.customData.targetArrayId;
+    if (mode !== "teacher") return;
 
-        // Find target array cell elements to determine geometry
-        const arrayCells = elements.filter(
-          (c) => c.customData?.dsaType === "cell" && c.customData?.arrayId === targetArrayId
-        );
+    // Detect dragging state using real Excalidraw AppState flags
+    const isDragging = Boolean(
+      appState.selectedElementsAreBeingDragged ||
+      appState.cursorButton === "down"
+    );
 
-        if (arrayCells.length > 0 && !isDragging) {
-          const firstCell = arrayCells[0];
-          const cellW = firstCell.width || 70;
-          const ptrCenterX = el.x + (el.width || 70) / 2;
+    // Track array movement and sync position to state
+    if (onArrayMove && !isDragging) {
+      const cellsByArray: Record<string, any[]> = {};
+      elements.forEach((el) => {
+        if (el.customData?.dsaType === "cell" && el.customData.arrayId) {
+          const arrId = el.customData.arrayId;
+          if (!cellsByArray[arrId]) cellsByArray[arrId] = [];
+          cellsByArray[arrId].push(el);
+        }
+      });
 
-          // Calculate closest cell index
-          const rawIdx = Math.round((ptrCenterX - firstCell.x - cellW / 2) / cellW);
-          const snappedIdx = Math.max(0, Math.min(arrayCells.length - 1, rawIdx));
-
-          const lastPos = lastKnownPointerPositionsRef.current.get(pointerId);
-          if (lastPos !== snappedIdx) {
-            lastKnownPointerPositionsRef.current.set(pointerId, snappedIdx);
-            onPointerSnap(pointerId, snappedIdx);
+      Object.entries(cellsByArray).forEach(([arrId, cells]) => {
+        const cell0 = cells.find((c) => c.customData?.index === 0) || cells[0];
+        if (cell0) {
+          const lastPos = lastKnownArrayPositionsRef.current.get(arrId);
+          if (!lastPos || lastPos.x !== cell0.x || lastPos.y !== cell0.y) {
+            lastKnownArrayPositionsRef.current.set(arrId, { x: cell0.x, y: cell0.y });
+            onArrayMove(arrId, { x: cell0.x, y: cell0.y });
           }
         }
+      });
+    }
+
+    // Track pointer movement and snapping on release
+    if (onPointerSnap) {
+      elements.forEach((el) => {
+        if (el.customData?.dsaType === "pointer") {
+          const pointerId = el.customData.pointerId || el.id.replace(/^ptr_/, "");
+          const targetArrayId = el.customData.targetArrayId;
+
+          // Find target array cell elements to determine geometry
+          const arrayCells = elements.filter(
+            (c) => c.customData?.dsaType === "cell" && c.customData?.arrayId === targetArrayId
+          );
+
+          if (arrayCells.length > 0 && !isDragging) {
+            const firstCell = arrayCells[0];
+            const cellW = firstCell.width || 70;
+            const ptrCenterX = el.x + (el.width || 70) / 2;
+
+            // Calculate closest cell index
+            const rawIdx = Math.round((ptrCenterX - firstCell.x - cellW / 2) / cellW);
+            const snappedIdx = Math.max(0, Math.min(arrayCells.length - 1, rawIdx));
+
+            const lastPos = lastKnownPointerPositionsRef.current.get(pointerId);
+            if (lastPos !== snappedIdx) {
+              lastKnownPointerPositionsRef.current.set(pointerId, snappedIdx);
+              onPointerSnap(pointerId, snappedIdx);
+            }
+          }
+        }
+      });
+    }
+
+    // Support cell selection to navigate active pointer
+    if (onCellClick && !isDragging && appState.selectedElementIds) {
+      const selectedIds = Object.keys(appState.selectedElementIds);
+      const selectedCell = elements.find(
+        (el) =>
+          selectedIds.includes(el.id) &&
+          (el.customData?.dsaType === "cell" || el.customData?.dsaType === "valueText")
+      );
+      if (selectedCell) {
+        onCellClick(
+          selectedCell.customData.arrayId,
+          selectedCell.customData.index
+        );
       }
-    });
+    }
   };
+
 
   return (
     <div

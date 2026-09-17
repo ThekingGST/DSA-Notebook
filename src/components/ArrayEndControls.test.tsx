@@ -82,4 +82,70 @@ describe("ArrayEndControls component", () => {
     const removeBtn = screen.getByRole("button", { name: /remove cell from nums/i });
     expect(removeBtn).toBeDisabled();
   });
+
+  it("moves adjacent to the active pointer position", () => {
+    const pointers = [
+      { id: "p1", name: "i", targetArrayId: "A", index: 2, color: "#8b5cf6" },
+    ];
+
+    const { container } = render(
+      <ArrayEndControls
+        arrays={sampleArrays}
+        pointers={pointers}
+        activePointerId="p1"
+        onAppendCell={vi.fn()}
+        onRemoveCell={vi.fn()}
+      />
+    );
+
+    const pill = container.querySelector(".array-end-pill");
+    expect(pill).toBeInTheDocument();
+    // Element 2 center = 100 + 2 * 70 + 35 = 275. ActionY = 200 + 56 + 34 = 290.
+    expect(pill?.getAttribute("style")).toContain("275px");
+    expect(pill?.getAttribute("style")).toContain("290px");
+  });
+
+  it("renders step navigation buttons when pointers are attached and navigates pointer", () => {
+    const pointers = [
+      { id: "p1", name: "i", targetArrayId: "A", index: 1, color: "#8b5cf6" },
+    ];
+    const handleNavigate = vi.fn();
+
+    render(
+      <ArrayEndControls
+        arrays={sampleArrays}
+        pointers={pointers}
+        activePointerId="p1"
+        onAppendCell={vi.fn()}
+        onRemoveCell={vi.fn()}
+        onNavigatePointer={handleNavigate}
+      />
+    );
+
+    const prevBtn = screen.getByRole("button", { name: /move pointer i left/i });
+    const nextBtn = screen.getByRole("button", { name: /move pointer i right/i });
+
+    expect(prevBtn).toBeInTheDocument();
+    expect(nextBtn).toBeInTheDocument();
+
+    fireEvent.click(prevBtn);
+    expect(handleNavigate).toHaveBeenCalledWith("p1", 0);
+
+    fireEvent.click(nextBtn);
+    expect(handleNavigate).toHaveBeenCalledWith("p1", 2);
+  });
+
+  it("hides controls when isEditing is true", () => {
+    const { container } = render(
+      <ArrayEndControls
+        arrays={sampleArrays}
+        isEditing={true}
+        onAppendCell={vi.fn()}
+        onRemoveCell={vi.fn()}
+      />
+    );
+
+    expect(container.querySelector(".array-end-pill")).not.toBeInTheDocument();
+  });
 });
+

@@ -116,7 +116,9 @@ export const App: React.FC = () => {
   const {
     state: teacherRawState,
     dsaState: teacherState,
+    activePointerId,
     addArray,
+    updateArrayPosition,
     updateCellValue,
     appendCell,
     removeCell,
@@ -125,11 +127,15 @@ export const App: React.FC = () => {
     resetTeacherState,
   } = useTeacherMode();
 
+  const [viewport, setViewport] = useState({ scrollX: 0, scrollY: 0, zoom: 1 });
+
   const activeState = mode === "teacher" ? teacherState : studentState;
 
   const compiledElements = useMemo(() => {
-    return compileDSAToExcalidraw(activeState);
-  }, [activeState]);
+    return compileDSAToExcalidraw(activeState, {
+      standalonePointers: mode === "teacher",
+    });
+  }, [activeState, mode]);
 
   const handleCommitCellEdit = (
     arrayId: string,
@@ -154,6 +160,13 @@ export const App: React.FC = () => {
           isRapidStepping={isRapidStepping}
           onCellDoubleClick={setActiveEdit}
           onPointerSnap={movePointer}
+          onArrayMove={updateArrayPosition}
+          onViewportChange={setViewport}
+          onCellClick={(_arrayId, index) => {
+            if (activePointerId) {
+              movePointer(activePointerId, index);
+            }
+          }}
         />
 
         {/* Student Mode: Playback Dock */}
@@ -173,8 +186,15 @@ export const App: React.FC = () => {
           <>
             <ArrayEndControls
               arrays={teacherRawState.arrays}
+              pointers={teacherRawState.pointers}
+              activePointerId={activePointerId}
+              scrollX={viewport.scrollX}
+              scrollY={viewport.scrollY}
+              zoom={viewport.zoom}
+              isEditing={activeEdit !== null}
               onAppendCell={appendCell}
               onRemoveCell={removeCell}
+              onNavigatePointer={movePointer}
             />
             <TeacherToolbox
               arrays={teacherRawState.arrays}

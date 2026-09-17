@@ -266,4 +266,66 @@ describe("WhiteboardCanvas component", () => {
       })
     );
   });
+
+  it("preserves scrollX, scrollY, and zoom when committing scene updates", () => {
+    mockAppState = {
+      scrollX: 120,
+      scrollY: -80,
+      zoom: { value: 1.5 },
+      selectedElementIds: {},
+    };
+
+    const dsaElements = compileDSAToExcalidraw({
+      arrays: [{ id: "A", name: "nums", elements: [10], position: { x: 100, y: 200 } }],
+      pointers: [],
+      variables: [],
+    });
+
+    render(<WhiteboardCanvas mode="teacher" initialElements={dsaElements} />);
+
+    expect(mockUpdateScene).toHaveBeenCalledWith(
+      expect.objectContaining({
+        appState: expect.objectContaining({
+          scrollX: 120,
+          scrollY: -80,
+          zoom: { value: 1.5 },
+        }),
+      })
+    );
+  });
+
+  it("triggers onArrayMove when array elements are dragged in Excalidraw", () => {
+    const handleArrayMove = vi.fn();
+    const dsaElements = compileDSAToExcalidraw({
+      arrays: [{ id: "A", name: "nums", elements: [10, 20], position: { x: 100, y: 200 } }],
+      pointers: [],
+      variables: [],
+    });
+
+    render(
+      <WhiteboardCanvas
+        mode="teacher"
+        initialElements={dsaElements}
+        onArrayMove={handleArrayMove}
+      />
+    );
+
+    // Simulate Excalidraw dragging array to x: 250, y: 350
+    const movedCells = dsaElements.map((el) => {
+      if (el.customData?.dsaType === "cell") {
+        return { ...el, x: el.x + 150, y: el.y + 150 };
+      }
+      return el;
+    });
+
+    mockSceneElements = movedCells;
+    mockAppState.selectedElementsAreBeingDragged = false;
+    mockAppState.cursorButton = "up";
+
+    const canvas = screen.getByTestId("mock-excalidraw-canvas");
+    fireEvent.click(canvas);
+
+    expect(handleArrayMove).toHaveBeenCalledWith("A", { x: 250, y: 350 });
+  });
 });
+

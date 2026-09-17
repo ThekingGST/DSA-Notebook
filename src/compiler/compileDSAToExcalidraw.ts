@@ -40,6 +40,19 @@ export interface ExcalidrawCompiledElement {
   autoResize?: boolean;
 }
 
+export interface CompilerOptions {
+  standalonePointers?: boolean;
+}
+
+function hashString(str: string): number {
+  let hash = 0;
+  for (let i = 0; i < str.length; i++) {
+    hash = (hash << 5) - hash + str.charCodeAt(i);
+    hash |= 0;
+  }
+  return Math.abs(hash);
+}
+
 function createBaseElement(
   id: string,
   type: "rectangle" | "text" | "arrow",
@@ -68,7 +81,7 @@ function createBaseElement(
     groupIds,
     frameId: null,
     roundness: type === "rectangle" ? { type: 3 } : null,
-    seed: Math.floor(Math.random() * 100000),
+    seed: (hashString(id) % 100000) + 1,
     version: Date.now(),
     versionNonce: Math.floor(Math.random() * 100000),
     isDeleted: false,
@@ -108,7 +121,11 @@ function wrapText(text: string, maxCharsPerLine = 48): string {
   return lines.join("\n");
 }
 
-export function compileDSAToExcalidraw(dsaState: DSAState): ExcalidrawCompiledElement[] {
+export function compileDSAToExcalidraw(
+  dsaState: DSAState,
+  options?: CompilerOptions
+): ExcalidrawCompiledElement[] {
+
   const elements: ExcalidrawCompiledElement[] = [];
   const { arrays, pointers, variables, narration, activeComparison, highlights = [] } = dsaState;
 
@@ -244,6 +261,9 @@ export function compileDSAToExcalidraw(dsaState: DSAState): ExcalidrawCompiledEl
     const pointerY = targetArr.position.y - 8 - ptrHeight - stackRank * (ptrHeight + 6);
     // Center pointer bounding box horizontally over cell center
     const pointerX = Math.round(cellCenterX - ptrWidth / 2);
+    const ptrGroupIds = options?.standalonePointers
+      ? [`ptr_group_${p.id}`]
+      : [`group_${targetArr.id}`];
 
     const ptrEl = createBaseElement(
       `ptr_${p.id}`,
@@ -252,7 +272,7 @@ export function compileDSAToExcalidraw(dsaState: DSAState): ExcalidrawCompiledEl
       pointerY,
       ptrWidth,
       ptrHeight,
-      [`group_${targetArr.id}`],
+      ptrGroupIds,
       {
         dsaType: "pointer",
         pointerId: p.id,

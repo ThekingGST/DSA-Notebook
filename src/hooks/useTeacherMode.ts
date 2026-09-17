@@ -31,19 +31,34 @@ export function useTeacherMode(initialState?: Partial<TeacherState>) {
     variables: initialState?.variables ?? defaultInitialTeacherState.variables,
   }));
 
+  const [activePointerId, setActivePointerId] = useState<string | null>(
+    () => (initialState?.pointers ?? defaultInitialTeacherState.pointers)[0]?.id ?? null
+  );
+
   const addArray = useCallback(
     (
       name: string,
       elements: (number | string)[],
-      position: { x: number; y: number } = { x: 140, y: 320 }
+      position?: { x: number; y: number }
     ) => {
       setState((prev) => {
+        let finalPos = position;
+        if (!finalPos) {
+          if (prev.arrays.length === 0) {
+            finalPos = { x: 140, y: 320 };
+          } else {
+            const maxY = Math.max(
+              ...prev.arrays.map((a) => a.position.y + (a.cellHeight || 56) + 60)
+            );
+            finalPos = { x: 140, y: maxY + 40 };
+          }
+        }
         const id = `arr_${Date.now()}`;
         const newArray: DSAArray = {
           id,
           name: name || `arr_${prev.arrays.length + 1}`,
           elements: elements.length > 0 ? elements : [0],
-          position,
+          position: finalPos,
           cellWidth: 70,
           cellHeight: 56,
         };
@@ -52,6 +67,18 @@ export function useTeacherMode(initialState?: Partial<TeacherState>) {
           arrays: [...prev.arrays, newArray],
         };
       });
+    },
+    []
+  );
+
+  const updateArrayPosition = useCallback(
+    (arrayId: string, position: { x: number; y: number }) => {
+      setState((prev) => ({
+        ...prev,
+        arrays: prev.arrays.map((arr) =>
+          arr.id === arrayId ? { ...arr, position } : arr
+        ),
+      }));
     },
     []
   );
@@ -74,7 +101,7 @@ export function useTeacherMode(initialState?: Partial<TeacherState>) {
   );
 
   const appendCell = useCallback(
-    (arrayId: string, value?: number | string) => {
+    (arrayId: string, value?: number | string, atIndex?: number) => {
       setState((prev) => ({
         ...prev,
         arrays: prev.arrays.map((arr) => {
@@ -84,9 +111,15 @@ export function useTeacherMode(initialState?: Partial<TeacherState>) {
           if (nextVal === undefined) {
             nextVal = typeof lastVal === "number" ? lastVal + 1 : 0;
           }
+          const nextElements = [...arr.elements];
+          if (atIndex !== undefined && atIndex >= 0 && atIndex < nextElements.length) {
+            nextElements.splice(atIndex + 1, 0, nextVal);
+          } else {
+            nextElements.push(nextVal);
+          }
           return {
             ...arr,
-            elements: [...arr.elements, nextVal],
+            elements: nextElements,
           };
         }),
       }));
@@ -95,17 +128,23 @@ export function useTeacherMode(initialState?: Partial<TeacherState>) {
   );
 
   const removeCell = useCallback(
-    (arrayId: string) => {
+    (arrayId: string, atIndex?: number) => {
       setState((prev) => {
         const targetArr = prev.arrays.find((a) => a.id === arrayId);
         if (!targetArr || targetArr.elements.length <= 1) return prev;
 
-        const newLength = targetArr.elements.length - 1;
+        const nextElements = [...targetArr.elements];
+        if (atIndex !== undefined && atIndex >= 0 && atIndex < nextElements.length) {
+          nextElements.splice(atIndex, 1);
+        } else {
+          nextElements.pop();
+        }
+
         const nextArrays = prev.arrays.map((arr) => {
           if (arr.id !== arrayId) return arr;
           return {
             ...arr,
-            elements: arr.elements.slice(0, newLength),
+            elements: nextElements,
           };
         });
 
@@ -114,7 +153,7 @@ export function useTeacherMode(initialState?: Partial<TeacherState>) {
           if (p.targetArrayId !== arrayId) return p;
           return {
             ...p,
-            index: Math.min(newLength, p.index),
+            index: Math.min(nextElements.length, Math.max(-1, p.index)),
           };
         });
 
@@ -130,20 +169,19 @@ export function useTeacherMode(initialState?: Partial<TeacherState>) {
 
   const addPointer = useCallback(
     (arrayId: string, name: string, index = 0, color = "#a78bfa") => {
-      setState((prev) => {
-        const id = `ptr_${Date.now()}_${Math.floor(Math.random() * 1000)}`;
-        const newPointer: DSAPointer = {
-          id,
-          name,
-          targetArrayId: arrayId,
-          index,
-          color,
-        };
-        return {
-          ...prev,
-          pointers: [...prev.pointers, newPointer],
-        };
-      });
+      const id = `ptr_${Date.now()}_${Math.floor(Math.random() * 1000)}`;
+      const newPointer: DSAPointer = {
+        id,
+        name,
+        targetArrayId: arrayId,
+        index,
+        color,
+      };
+      setState((prev) => ({
+        ...prev,
+        pointers: [...prev.pointers, newPointer],
+      }));
+      setActivePointerId(id);
     },
     []
   );
@@ -164,15 +202,20 @@ export function useTeacherMode(initialState?: Partial<TeacherState>) {
           ),
         };
       });
+      setActivePointerId(pointerId);
     },
     []
   );
 
   const removePointer = useCallback((pointerId: string) => {
-    setState((prev) => ({
-      ...prev,
-      pointers: prev.pointers.filter((p) => p.id !== pointerId),
-    }));
+    setState((prev) => {
+      const nextPointers = prev.pointers.filter((p) => p.id !== pointerId);
+      return {
+        ...prev,
+        pointers: nextPointers,
+      };
+    });
+    setActivePointerId((curr) => (curr === pointerId ? null : curr));
   }, []);
 
   const resetTeacherState = useCallback(
@@ -199,7 +242,10 @@ export function useTeacherMode(initialState?: Partial<TeacherState>) {
   return {
     state,
     dsaState,
+    activePointerId,
+    setActivePointerId,
     addArray,
+    updateArrayPosition,
     updateCellValue,
     appendCell,
     removeCell,
@@ -209,3 +255,4 @@ export function useTeacherMode(initialState?: Partial<TeacherState>) {
     resetTeacherState,
   };
 }
+
