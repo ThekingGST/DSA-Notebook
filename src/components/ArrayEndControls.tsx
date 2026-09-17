@@ -45,8 +45,15 @@ export const ArrayEndControls: React.FC<ArrayEndControlsProps> = ({
         let targetIndex = arr.elements.length - 1;
 
         if (hasPointers && activePtr) {
-          targetIndex = Math.max(0, Math.min(arr.elements.length - 1, activePtr.index));
-          const cellCenterX = arr.position.x + targetIndex * cellW + cellW / 2;
+          targetIndex = Math.max(-1, Math.min(arr.elements.length, activePtr.index));
+          let cellCenterX: number;
+          if (targetIndex === -1) {
+            cellCenterX = arr.position.x - cellW / 2;
+          } else if (targetIndex >= arr.elements.length) {
+            cellCenterX = arr.position.x + arr.elements.length * cellW + cellW / 2;
+          } else {
+            cellCenterX = arr.position.x + targetIndex * cellW + cellW / 2;
+          }
           // Position adjacent to active cell: directly below index label
           const actionY = arr.position.y + cellH + 34;
           screenX = (cellCenterX + scrollX) * zoom;
@@ -76,7 +83,7 @@ export const ArrayEndControls: React.FC<ArrayEndControlsProps> = ({
                 type="button"
                 className="end-btn step-btn"
                 onClick={() => onNavigatePointer(activePtr.id, targetIndex - 1)}
-                disabled={targetIndex <= 0}
+                disabled={targetIndex <= -1}
                 aria-label={`Move pointer ${activePtr.name} left`}
                 title="Move pointer left (◀)"
               >
@@ -86,11 +93,12 @@ export const ArrayEndControls: React.FC<ArrayEndControlsProps> = ({
             <button
               type="button"
               className="end-btn append-btn"
-              onClick={() =>
-                hasPointers
-                  ? onAppendCell(arr.id, undefined, targetIndex)
-                  : onAppendCell(arr.id)
-              }
+              onClick={() => {
+                const safeIndex = Math.max(0, Math.min(arr.elements.length - 1, targetIndex));
+                return hasPointers
+                  ? onAppendCell(arr.id, undefined, safeIndex)
+                  : onAppendCell(arr.id);
+              }}
               aria-label={`Append cell to ${arr.name}`}
               title="Add cell (+)"
             >
@@ -99,11 +107,12 @@ export const ArrayEndControls: React.FC<ArrayEndControlsProps> = ({
             <button
               type="button"
               className="end-btn remove-btn"
-              onClick={() =>
-                hasPointers
-                  ? onRemoveCell(arr.id, targetIndex)
-                  : onRemoveCell(arr.id)
-              }
+              onClick={() => {
+                const safeIndex = Math.max(0, Math.min(arr.elements.length - 1, targetIndex));
+                return hasPointers
+                  ? onRemoveCell(arr.id, safeIndex)
+                  : onRemoveCell(arr.id);
+              }}
               disabled={!canRemove}
               aria-label={`Remove cell from ${arr.name}`}
               title="Remove cell (–)"
@@ -116,7 +125,7 @@ export const ArrayEndControls: React.FC<ArrayEndControlsProps> = ({
                 type="button"
                 className="end-btn step-btn"
                 onClick={() => onNavigatePointer(activePtr.id, targetIndex + 1)}
-                disabled={targetIndex >= arr.elements.length - 1}
+                disabled={targetIndex >= arr.elements.length}
                 aria-label={`Move pointer ${activePtr.name} right`}
                 title="Move pointer right (▶)"
               >

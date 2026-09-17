@@ -14,6 +14,7 @@ export interface WhiteboardCanvasProps {
   onPointerSnap?: (pointerId: string, targetIndex: number) => void;
   onArrayMove?: (arrayId: string, position: { x: number; y: number }) => void;
   onCellClick?: (arrayId: string, index: number) => void;
+  onPointerSelect?: (pointerId: string) => void;
   onViewportChange?: (viewport: { scrollX: number; scrollY: number; zoom: number }) => void;
 }
 
@@ -25,6 +26,7 @@ export const WhiteboardCanvas: React.FC<WhiteboardCanvasProps> = ({
   onPointerSnap,
   onArrayMove,
   onCellClick,
+  onPointerSelect,
   onViewportChange,
 }) => {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -117,8 +119,8 @@ export const WhiteboardCanvas: React.FC<WhiteboardCanvasProps> = ({
       }
     });
 
-    // If rapid stepping, initial render, or no pointer moved: snap instantly
-    if (isRapidStepping || movingPointers.length === 0) {
+    // If rapid stepping, teacher mode authoring, initial render, or no pointer moved: snap instantly
+    if (isRapidStepping || mode === "teacher" || movingPointers.length === 0) {
       targetPointers.forEach((p) => {
         currentPointers.set(p.id, { x: p.x, y: p.y });
       });
@@ -313,10 +315,10 @@ export const WhiteboardCanvas: React.FC<WhiteboardCanvasProps> = ({
     }
 
     // Track pointer movement and snapping on release
-    if (onPointerSnap) {
+    if (onPointerSnap && !animFrameRef.current && !isDragging) {
       elements.forEach((el) => {
         if (el.customData?.dsaType === "pointer") {
-          const pointerId = el.customData.pointerId || el.id.replace(/^ptr_/, "");
+          const pointerId = (el.customData.pointerId as string) || el.id.replace(/^ptr_/, "");
           const targetArrayId = el.customData.targetArrayId;
 
           // Find target array cell elements to determine geometry
@@ -324,47 +326,63 @@ export const WhiteboardCanvas: React.FC<WhiteboardCanvasProps> = ({
             (c) => c.customData?.dsaType === "cell" && c.customData?.arrayId === targetArrayId
           );
 
-          if (arrayCells.length > 0 && !isDragging) {
-            const firstCell = arrayCells[0];
-            const cellW = firstCell.width || 70;
+          if (arrayCells.length > 0) {
+            const cell0 = arrayCells.find((c) => c.customData?.index === 0) || arrayCells[0];
+            const cellW = cell0.width || 70;
             const ptrCenterX = el.x + (el.width || 70) / 2;
 
-            // Calculate closest cell index
-            const rawIdx = Math.round((ptrCenterX - firstCell.x - cellW / 2) / cellW);
-            const snappedIdx = Math.max(0, Math.min(arrayCells.length - 1, rawIdx));
+            // Calculate closest cell index relative to cell 0 center
+            const rawIdx = Math.round((ptrCenterX - cell0.x - cellW / 2) / cellW);
+            const maxIdx = arrayCells.length;
+            const snappedIdx = Math.max(-1, Math.min(maxIdx, rawIdx));
 
             const lastPos = lastKnownPointerPositionsRef.current.get(pointerId);
-            if (lastPos === undefined) {
-              lastKnownPointerPositionsRef.current.set(pointerId, snappedIdx);
-            } else if (lastPos !== snappedIdx) {
+            if (lastPos !== undefined && lastPos !== snappedIdx) {
               lastKnownPointerPositionsRef.current.set(pointerId, snappedIdx);
               onPointerSnap(pointerId, snappedIdx);
+            } else if (lastPos === undefined) {
+              lastKnownPointerPositionsRef.current.set(pointerId, snappedIdx);
             }
           }
         }
       });
     }
 
-    // Support cell selection to navigate active pointer
-    if (onCellClick && !isDragging && appState.selectedElementIds) {
+    // Support pointer element selection or cell selection
+    if (!isDragging && appState.selectedElementIds) {
       const selectedIds = Object.keys(appState.selectedElementIds);
-      const selectedCell = elements.find(
+
+      // If a pointer was clicked, activate it
+      const selectedPtr = elements.find(
         (el) =>
           selectedIds.includes(el.id) &&
-          (el.customData?.dsaType === "cell" || el.customData?.dsaType === "valueText")
+          el.customData?.dsaType === "pointer"
       );
-      const selectedKey = selectedCell
-        ? `${selectedCell.customData.arrayId}_${selectedCell.customData.index}`
-        : null;
+      if (selectedPtr && onPointerSelect) {
+        const ptrId = (selectedPtr.customData.pointerId as string) || selectedPtr.id.replace(/^ptr_/, "");
+        onPointerSelect(ptrId);
+      }
 
-      if (selectedKey && selectedKey !== lastSelectedCellRef.current) {
-        lastSelectedCellRef.current = selectedKey;
-        onCellClick(
-          selectedCell.customData.arrayId,
-          selectedCell.customData.index
+      // If a cell was clicked, navigate active pointer to it
+      if (onCellClick) {
+        const selectedCell = elements.find(
+          (el) =>
+            selectedIds.includes(el.id) &&
+            (el.customData?.dsaType === "cell" || el.customData?.dsaType === "valueText")
         );
-      } else if (!selectedKey) {
-        lastSelectedCellRef.current = null;
+        const selectedKey = selectedCell
+          ? `${selectedCell.customData.arrayId}_${selectedCell.customData.index}`
+          : null;
+
+        if (selectedKey && selectedKey !== lastSelectedCellRef.current) {
+          lastSelectedCellRef.current = selectedKey;
+          onCellClick(
+            selectedCell.customData.arrayId,
+            selectedCell.customData.index
+          );
+        } else if (!selectedKey) {
+          lastSelectedCellRef.current = null;
+        }
       }
     }
   };

@@ -327,5 +327,93 @@ describe("WhiteboardCanvas component", () => {
 
     expect(handleArrayMove).toHaveBeenCalledWith("A", { x: 250, y: 350 });
   });
+
+  it("triggers onPointerSnap when a pointer is dragged to a different index", () => {
+    const handlePointerSnap = vi.fn();
+    const dsaElements = compileDSAToExcalidraw({
+      arrays: [{ id: "A", name: "nums", elements: [10, 20, 30, 40], position: { x: 100, y: 200 } }],
+      pointers: [{ id: "p1", name: "i", targetArrayId: "A", index: 0 }],
+      variables: [],
+    }, { standalonePointers: true });
+
+    render(
+      <WhiteboardCanvas
+        mode="teacher"
+        initialElements={dsaElements}
+        onPointerSnap={handlePointerSnap}
+      />
+    );
+
+    // Simulate pointer being dragged from cell 0 (x ~ 100) to cell 2 (x ~ 240)
+    const movedElements = dsaElements.map((el) => {
+      if (el.customData?.dsaType === "pointer") {
+        return { ...el, x: el.x + 140 }; // Moved 2 cells over (70px * 2)
+      }
+      return el;
+    });
+
+    mockSceneElements = movedElements;
+    mockAppState.selectedElementsAreBeingDragged = false;
+    mockAppState.cursorButton = "up";
+
+    const canvas = screen.getByTestId("mock-excalidraw-canvas");
+    fireEvent.click(canvas);
+
+    expect(handlePointerSnap).toHaveBeenCalledWith("p1", 2);
+  });
+
+  it("triggers onPointerSelect when a pointer element is clicked", () => {
+    const handlePointerSelect = vi.fn();
+    const dsaElements = compileDSAToExcalidraw({
+      arrays: [{ id: "A", name: "nums", elements: [10, 20], position: { x: 100, y: 200 } }],
+      pointers: [{ id: "p1", name: "i", targetArrayId: "A", index: 0 }],
+      variables: [],
+    }, { standalonePointers: true });
+
+    render(
+      <WhiteboardCanvas
+        mode="teacher"
+        initialElements={dsaElements}
+        onPointerSelect={handlePointerSelect}
+      />
+    );
+
+    mockSceneElements = dsaElements;
+    mockAppState.selectedElementIds = { ptr_p1: true };
+    mockAppState.selectedElementsAreBeingDragged = false;
+    mockAppState.cursorButton = "up";
+
+    const canvas = screen.getByTestId("mock-excalidraw-canvas");
+    fireEvent.click(canvas);
+
+    expect(handlePointerSelect).toHaveBeenCalledWith("p1");
+  });
+
+  it("triggers onCellClick when a cell is clicked to navigate the active pointer", () => {
+    const handleCellClick = vi.fn();
+    const dsaElements = compileDSAToExcalidraw({
+      arrays: [{ id: "A", name: "nums", elements: [10, 20, 30], position: { x: 100, y: 200 } }],
+      pointers: [{ id: "p1", name: "i", targetArrayId: "A", index: 0 }],
+      variables: [],
+    });
+
+    render(
+      <WhiteboardCanvas
+        mode="teacher"
+        initialElements={dsaElements}
+        onCellClick={handleCellClick}
+      />
+    );
+
+    mockSceneElements = dsaElements;
+    mockAppState.selectedElementIds = { cell_A_2: true };
+    mockAppState.selectedElementsAreBeingDragged = false;
+    mockAppState.cursorButton = "up";
+
+    const canvas = screen.getByTestId("mock-excalidraw-canvas");
+    fireEvent.click(canvas);
+
+    expect(handleCellClick).toHaveBeenCalledWith("A", 2);
+  });
 });
 

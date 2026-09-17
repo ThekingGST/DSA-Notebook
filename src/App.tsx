@@ -118,6 +118,7 @@ export const App: React.FC = () => {
     state: teacherRawState,
     dsaState: teacherState,
     activePointerId,
+    setActivePointerId,
     addArray,
     updateArrayPosition,
     updateCellValue,
@@ -162,6 +163,7 @@ export const App: React.FC = () => {
             isRapidStepping={isRapidStepping}
             onCellDoubleClick={setActiveEdit}
             onPointerSnap={movePointer}
+            onPointerSelect={setActivePointerId}
             onArrayMove={updateArrayPosition}
             onViewportChange={mode === "teacher" ? setViewport : undefined}
             onCellClick={(_arrayId, index) => {

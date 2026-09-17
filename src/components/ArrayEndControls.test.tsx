@@ -147,5 +147,55 @@ describe("ArrayEndControls component", () => {
 
     expect(container.querySelector(".array-end-pill")).not.toBeInTheDocument();
   });
+
+  it("supports boundary pointer navigation at -1 and array length", () => {
+    const pointers = [
+      { id: "p1", name: "i", targetArrayId: "A", index: 0, color: "#8b5cf6" },
+    ];
+    const handleNavigate = vi.fn();
+
+    const { rerender } = render(
+      <ArrayEndControls
+        arrays={sampleArrays}
+        pointers={pointers}
+        activePointerId="p1"
+        onAppendCell={vi.fn()}
+        onRemoveCell={vi.fn()}
+        onNavigatePointer={handleNavigate}
+      />
+    );
+
+    // Can navigate left from 0 to boundary -1
+    const prevBtn = screen.getByRole("button", { name: /move pointer i left/i });
+    expect(prevBtn).not.toBeDisabled();
+    fireEvent.click(prevBtn);
+    expect(handleNavigate).toHaveBeenCalledWith("p1", -1);
+
+    // When at boundary -1, left button is disabled
+    rerender(
+      <ArrayEndControls
+        arrays={sampleArrays}
+        pointers={[{ id: "p1", name: "i", targetArrayId: "A", index: -1, color: "#8b5cf6" }]}
+        activePointerId="p1"
+        onAppendCell={vi.fn()}
+        onRemoveCell={vi.fn()}
+        onNavigatePointer={handleNavigate}
+      />
+    );
+    expect(screen.getByRole("button", { name: /move pointer i left/i })).toBeDisabled();
+
+    // When at array length (3), right button is disabled
+    rerender(
+      <ArrayEndControls
+        arrays={sampleArrays}
+        pointers={[{ id: "p1", name: "i", targetArrayId: "A", index: 3, color: "#8b5cf6" }]}
+        activePointerId="p1"
+        onAppendCell={vi.fn()}
+        onRemoveCell={vi.fn()}
+        onNavigatePointer={handleNavigate}
+      />
+    );
+    expect(screen.getByRole("button", { name: /move pointer i right/i })).toBeDisabled();
+  });
 });
 
