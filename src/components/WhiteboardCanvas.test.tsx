@@ -1,22 +1,36 @@
 import { useEffect } from "react";
-import { render, screen } from "@testing-library/react";
-import { describe, it, expect, vi } from "vitest";
+import { render, screen, fireEvent } from "@testing-library/react";
+import { describe, it, expect, vi, beforeEach } from "vitest";
 import { WhiteboardCanvas } from "./WhiteboardCanvas";
 import { compileDSAToExcalidraw } from "../compiler/compileDSAToExcalidraw";
 
 let mockUpdateScene = vi.fn();
+let mockSceneElements: any[] = [];
+let mockAppState: any = {
+  scrollX: 0,
+  scrollY: 0,
+  zoom: { value: 1 },
+  selectedElementIds: {},
+};
 
 vi.mock("@excalidraw/excalidraw", () => ({
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  Excalidraw: ({ excalidrawAPI, initialData }: any) => {
+  Excalidraw: ({ excalidrawAPI, initialData, onChange }: any) => {
     useEffect(() => {
       if (excalidrawAPI) {
-        excalidrawAPI({ updateScene: mockUpdateScene });
+        excalidrawAPI({
+          updateScene: mockUpdateScene,
+          getSceneElements: () => mockSceneElements,
+          getAppState: () => mockAppState,
+        });
       }
       // eslint-disable-next-line react-hooks/exhaustive-deps
     }, []);
     return (
-      <div data-testid="mock-excalidraw-canvas">
+      <div
+        data-testid="mock-excalidraw-canvas"
+        onClick={() => onChange?.(mockSceneElements, mockAppState)}
+      >
         Excalidraw Mock ({initialData?.elements?.length || 0} elements)
       </div>
     );
@@ -24,8 +38,22 @@ vi.mock("@excalidraw/excalidraw", () => ({
 }));
 
 describe("WhiteboardCanvas component", () => {
+  beforeEach(() => {
+    mockUpdateScene = vi.fn((scene) => {
+      if (scene?.elements) {
+        mockSceneElements = scene.elements;
+      }
+    });
+    mockSceneElements = [];
+    mockAppState = {
+      scrollX: 0,
+      scrollY: 0,
+      zoom: { value: 1 },
+      selectedElementIds: {},
+    };
+  });
+
   it("renders with compiled DSA initial elements", () => {
-    mockUpdateScene = vi.fn();
     const elements = compileDSAToExcalidraw({
       arrays: [
         {
@@ -46,7 +74,6 @@ describe("WhiteboardCanvas component", () => {
   });
 
   it("snaps pointer immediately when isRapidStepping is true", () => {
-    mockUpdateScene = vi.fn();
     const state0 = {
       arrays: [
         {
@@ -81,13 +108,14 @@ describe("WhiteboardCanvas component", () => {
     // Under rapid stepping, it should immediately commit the target elements
     expect(mockUpdateScene).toHaveBeenCalledWith(
       expect.objectContaining({
-        elements: elements1,
+        elements: expect.arrayContaining([
+          expect.objectContaining({ id: "ptr_p1" }),
+        ]),
       })
     );
   });
 
   it("glides smoothly via requestAnimationFrame when isRapidStepping is false", () => {
-    mockUpdateScene = vi.fn();
     const rafSpy = vi.spyOn(window, "requestAnimationFrame");
 
     const state0 = {
@@ -127,7 +155,6 @@ describe("WhiteboardCanvas component", () => {
   });
 
   it("cancels in-flight smooth glide and snaps immediately when rapid stepping interrupts", () => {
-    mockUpdateScene = vi.fn();
     const cancelSpy = vi.spyOn(window, "cancelAnimationFrame");
 
     const state0 = {
@@ -170,11 +197,73 @@ describe("WhiteboardCanvas component", () => {
     // Step 2 elements should be committed immediately
     expect(mockUpdateScene).toHaveBeenCalledWith(
       expect.objectContaining({
-        elements: elements2,
+        elements: expect.arrayContaining([
+          expect.objectContaining({ id: "ptr_p1" }),
+        ]),
       })
     );
 
     cancelSpy.mockRestore();
   });
-});
 
+  it("preserves non-DSA user drawings and shapes when updating scenes", () => {
+    // Inject a non-DSA user freehand element
+    const freehandElement = {
+      id: "freehand_1",
+      type: "freedraw",
+      x: 50,
+      y: 50,
+      points: [[0, 0], [10, 10]],
+    };
+    mockSceneElements = [freehandElement];
+
+    const dsaElements = compileDSAToExcalidraw({
+      arrays: [{ id: "A", name: "nums", elements: [1, 2], position: { x: 100, y: 200 } }],
+      pointers: [],
+      variables: [],
+    });
+
+    render(<WhiteboardCanvas mode="teacher" initialElements={dsaElements} />);
+
+    // Commit should preserve freehand_1 alongside DSA elements
+    expect(mockUpdateScene).toHaveBeenCalledWith(
+      expect.objectContaining({
+        elements: expect.arrayContaining([
+          expect.objectContaining({ id: "freehand_1" }),
+          expect.objectContaining({ id: "cell_A_0" }),
+        ]),
+      })
+    );
+  });
+
+  it("triggers onCellDoubleClick when double clicking an array cell in Teacher Mode", () => {
+    const handleCellDoubleClick = vi.fn();
+    const dsaElements = compileDSAToExcalidraw({
+      arrays: [{ id: "A", name: "nums", elements: [10, 20], position: { x: 100, y: 200 } }],
+      pointers: [],
+      variables: [],
+    });
+
+    mockSceneElements = [...dsaElements];
+    mockAppState.selectedElementIds = { cell_A_1: true };
+
+    render(
+      <WhiteboardCanvas
+        mode="teacher"
+        initialElements={dsaElements}
+        onCellDoubleClick={handleCellDoubleClick}
+      />
+    );
+
+    const wrapper = screen.getByTestId("whiteboard-wrapper");
+    fireEvent.doubleClick(wrapper);
+
+    expect(handleCellDoubleClick).toHaveBeenCalledWith(
+      expect.objectContaining({
+        arrayId: "A",
+        index: 1,
+        initialValue: "20",
+      })
+    );
+  });
+});
