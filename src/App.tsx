@@ -93,6 +93,7 @@ export const App: React.FC = () => {
     currentStep,
     totalSteps,
     isPlaying,
+    isRapidStepping,
     currentState,
     stepTo,
     togglePlay,
@@ -107,7 +108,11 @@ export const App: React.FC = () => {
     <div className="app-container">
       <Header mode={mode} onModeChange={setMode} />
       <main className="main-viewport">
-        <WhiteboardCanvas mode={mode} initialElements={compiledElements} />
+        <WhiteboardCanvas
+          mode={mode}
+          initialElements={compiledElements}
+          isRapidStepping={isRapidStepping}
+        />
         {mode === "student" && (
           <PlaybackDock
             currentStep={currentStep}
