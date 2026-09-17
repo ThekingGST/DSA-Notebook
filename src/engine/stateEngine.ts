@@ -1,4 +1,4 @@
-import { DSAState, AlgorithmStepAction } from "./types";
+import { DSAState, AlgorithmStepAction, ExecutionTrace, ComputedSnapshot } from "./types";
 
 export function dsaReducer(state: DSAState, action: AlgorithmStepAction): DSAState {
   switch (action.type) {
@@ -105,5 +105,114 @@ export function dsaReducer(state: DSAState, action: AlgorithmStepAction): DSASta
 
     default:
       return state;
+  }
+}
+
+export function computeSnapshots(trace: ExecutionTrace): ComputedSnapshot[] {
+  const snapshots: ComputedSnapshot[] = [];
+
+  // Snapshot 0: Initial State
+  snapshots.push({
+    stepIndex: 0,
+    title: "Initial State",
+    explanation: "Algorithm loaded at initial state.",
+    state: {
+      ...trace.initialState,
+      narration: { title: "Initial State", text: "Algorithm initialized." },
+    },
+  });
+
+  let currentState = { ...trace.initialState };
+
+  trace.steps.forEach((step) => {
+    for (const action of step.actions) {
+      currentState = dsaReducer(currentState, action);
+    }
+    currentState = {
+      ...currentState,
+      narration: {
+        title: step.title,
+        text: step.explanation,
+      },
+    };
+    snapshots.push({
+      stepIndex: step.stepIndex,
+      title: step.title,
+      explanation: step.explanation,
+      state: currentState,
+    });
+  });
+
+  return snapshots;
+}
+
+export class DSAStateEngine {
+  private trace: ExecutionTrace;
+  private snapshots: ComputedSnapshot[];
+  private currentStepIndex: number;
+
+  constructor(trace: ExecutionTrace) {
+    this.trace = trace;
+    this.snapshots = computeSnapshots(trace);
+    this.currentStepIndex = 0;
+  }
+
+  public loadTrace(trace: ExecutionTrace): void {
+    this.trace = trace;
+    this.snapshots = computeSnapshots(trace);
+    this.currentStepIndex = 0;
+  }
+
+  public getTrace(): ExecutionTrace {
+    return this.trace;
+  }
+
+  public getCurrentStepIndex(): number {
+    return this.currentStepIndex;
+  }
+
+  public getTotalSteps(): number {
+    return Math.max(0, this.snapshots.length - 1);
+  }
+
+  public getCurrentSnapshot(): ComputedSnapshot {
+    return this.snapshots[this.currentStepIndex];
+  }
+
+  public getCurrentState(): DSAState {
+    return this.getCurrentSnapshot().state;
+  }
+
+  public canStepForward(): boolean {
+    return this.currentStepIndex < this.snapshots.length - 1;
+  }
+
+  public canStepBackward(): boolean {
+    return this.currentStepIndex > 0;
+  }
+
+  public stepForward(): ComputedSnapshot {
+    if (this.canStepForward()) {
+      this.currentStepIndex++;
+    }
+    return this.getCurrentSnapshot();
+  }
+
+  public stepBackward(): ComputedSnapshot {
+    if (this.canStepBackward()) {
+      this.currentStepIndex--;
+    }
+    return this.getCurrentSnapshot();
+  }
+
+  public stepTo(stepIndex: number): ComputedSnapshot {
+    const clamped = Math.max(0, Math.min(this.snapshots.length - 1, stepIndex));
+    this.currentStepIndex = clamped;
+    return this.getCurrentSnapshot();
+  }
+
+  public reset(): ComputedSnapshot {
+    this.currentStepIndex = 0;
+    return this.getCurrentSnapshot();
   }
 }

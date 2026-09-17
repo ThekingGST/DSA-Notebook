@@ -1,6 +1,6 @@
 import { describe, it, expect } from "vitest";
-import { dsaReducer } from "./stateEngine";
-import { DSAState, AlgorithmStepAction } from "./types";
+import { dsaReducer, computeSnapshots, DSAStateEngine } from "./stateEngine";
+import { DSAState, AlgorithmStepAction, ExecutionTrace } from "./types";
 
 describe("dsaReducer", () => {
   const baseState: DSAState = {
@@ -125,5 +125,77 @@ describe("dsaReducer", () => {
     const cleared = dsaReducer(highlighted, { type: "clear_highlights" });
     expect(cleared.highlights).toEqual([]);
     expect(cleared.activeComparison).toBeNull();
+  });
+});
+
+describe("computeSnapshots & DSAStateEngine", () => {
+  const trace: ExecutionTrace = {
+    initialState: {
+      arrays: [
+        {
+          id: "A",
+          name: "nums",
+          elements: [10, 20, 30],
+          position: { x: 100, y: 100 },
+        },
+      ],
+      pointers: [{ id: "p1", name: "i", targetArrayId: "A", index: 0 }],
+      variables: [{ id: "v1", name: "max", value: 10 }],
+    },
+    steps: [
+      {
+        stepIndex: 1,
+        title: "Step 1: Compare",
+        explanation: "Comparing nums[0] and nums[1]",
+        actions: [
+          { type: "compare" as const, arrayId: "A", indexA: 0, indexB: 1 },
+          { type: "move_pointer" as const, pointerId: "p1", toIndex: 1 },
+        ],
+      },
+      {
+        stepIndex: 2,
+        title: "Step 2: Update Max",
+        explanation: "nums[1] > max, updating max to 20",
+        actions: [{ type: "set_variable" as const, variableId: "v1", value: 20 }],
+      },
+    ],
+  };
+
+  it("precomputes all snapshots deterministically from initial state", () => {
+    const snapshots = computeSnapshots(trace);
+    expect(snapshots).toHaveLength(3); // step 0, 1, 2
+    expect(snapshots[0].stepIndex).toBe(0);
+    expect(snapshots[0].state.pointers[0].index).toBe(0);
+
+    expect(snapshots[1].stepIndex).toBe(1);
+    expect(snapshots[1].state.pointers[0].index).toBe(1);
+    expect(snapshots[1].state.activeComparison?.indexB).toBe(1);
+
+    expect(snapshots[2].stepIndex).toBe(2);
+    expect(snapshots[2].state.variables[0].value).toBe(20);
+  });
+
+  it("supports state scrubbing, step forward/backward, and reset", () => {
+    const engine = new DSAStateEngine(trace);
+    expect(engine.getCurrentStepIndex()).toBe(0);
+    expect(engine.canStepBackward()).toBe(false);
+    expect(engine.canStepForward()).toBe(true);
+
+    engine.stepForward();
+    expect(engine.getCurrentStepIndex()).toBe(1);
+    expect(engine.getCurrentSnapshot().state.pointers[0].index).toBe(1);
+
+    engine.stepForward();
+    expect(engine.getCurrentStepIndex()).toBe(2);
+    expect(engine.canStepForward()).toBe(false);
+
+    engine.stepBackward();
+    expect(engine.getCurrentStepIndex()).toBe(1);
+
+    engine.reset();
+    expect(engine.getCurrentStepIndex()).toBe(0);
+
+    engine.stepTo(2);
+    expect(engine.getCurrentStepIndex()).toBe(2);
   });
 });
