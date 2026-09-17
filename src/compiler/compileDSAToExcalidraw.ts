@@ -37,6 +37,7 @@ export interface ExcalidrawCompiledElement {
   containerId?: string | null;
   originalText?: string;
   lineHeight?: number;
+  autoResize?: boolean;
 }
 
 function createBaseElement(
@@ -49,7 +50,7 @@ function createBaseElement(
   groupIds: string[],
   customData: Record<string, unknown>
 ): ExcalidrawCompiledElement {
-  return {
+  const el: ExcalidrawCompiledElement = {
     id,
     type,
     x,
@@ -57,7 +58,7 @@ function createBaseElement(
     width,
     height,
     angle: 0,
-    strokeColor: "#e1e1e6",
+    strokeColor: "#1e1e1e",
     backgroundColor: "transparent",
     fillStyle: "solid",
     strokeWidth: 1.5,
@@ -68,8 +69,8 @@ function createBaseElement(
     frameId: null,
     roundness: type === "rectangle" ? { type: 3 } : null,
     seed: Math.floor(Math.random() * 100000),
-    version: 1,
-    versionNonce: 1,
+    version: Date.now(),
+    versionNonce: Math.floor(Math.random() * 100000),
     isDeleted: false,
     boundElements: null,
     updated: Date.now(),
@@ -77,6 +78,16 @@ function createBaseElement(
     locked: false,
     customData,
   };
+
+  if (type === "text") {
+    el.lineHeight = 1.25 as any;
+    el.autoResize = true;
+    el.baseline = 14;
+    el.textAlign = "center";
+    el.verticalAlign = "middle";
+  }
+
+  return el;
 }
 
 export function compileDSAToExcalidraw(dsaState: DSAState): ExcalidrawCompiledElement[] {
@@ -105,13 +116,13 @@ export function compileDSAToExcalidraw(dsaState: DSAState): ExcalidrawCompiledEl
         (h) => h.arrayId === arr.id && h.index === idx
       );
 
-      let strokeColor = "#e1e1e6";
-      let backgroundColor = "rgba(255, 255, 255, 0.04)";
+      let strokeColor = "#1e1e1e";
+      let backgroundColor = "rgba(0, 0, 0, 0.02)";
       let strokeWidth = 1.5;
 
       if (isComparing) {
-        strokeColor = "#f1b000"; // amber
-        backgroundColor = "rgba(241, 176, 0, 0.15)";
+        strokeColor = "#d97706"; // amber
+        backgroundColor = "rgba(241, 176, 0, 0.2)";
         strokeWidth = 2.5;
       } else if (customHighlight) {
         strokeColor = customHighlight.color;
@@ -154,7 +165,7 @@ export function compileDSAToExcalidraw(dsaState: DSAState): ExcalidrawCompiledEl
       textEl.fontFamily = 1;
       textEl.textAlign = "center";
       textEl.verticalAlign = "middle";
-      textEl.strokeColor = "#ffffff";
+      textEl.strokeColor = "#1e1e1e";
       textEl.containerId = cellId;
       elements.push(textEl);
 
@@ -176,7 +187,7 @@ export function compileDSAToExcalidraw(dsaState: DSAState): ExcalidrawCompiledEl
       idxEl.fontFamily = 1;
       idxEl.textAlign = "center";
       idxEl.verticalAlign = "middle";
-      idxEl.strokeColor = "#a1a1aa";
+      idxEl.strokeColor = "#52525b";
       elements.push(idxEl);
     });
   });
@@ -282,7 +293,8 @@ export function compileDSAToExcalidraw(dsaState: DSAState): ExcalidrawCompiledEl
     narrationEl.originalText = text;
     narrationEl.fontSize = 15;
     narrationEl.fontFamily = 1;
-    narrationEl.strokeColor = "#f4f4f5";
+    narrationEl.textAlign = "left";
+    narrationEl.strokeColor = "#121214";
     elements.push(narrationEl);
   }
 

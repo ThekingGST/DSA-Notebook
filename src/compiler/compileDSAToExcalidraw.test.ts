@@ -49,6 +49,9 @@ describe("compileDSAToExcalidraw", () => {
     expect(val0?.y).toBe(200);
     expect(val0?.containerId).toBe("cell_A_0");
     expect(val0?.groupIds).toEqual(["group_A"]);
+    expect(val0?.lineHeight).toBe(1.25);
+    expect(val0?.autoResize).toBe(true);
+    expect(val0?.strokeColor).toBe("#1e1e1e");
 
     // Check index label (aligned under cell)
     const idx0 = elements.find((e) => e.id === "idx_A_0");
@@ -58,6 +61,8 @@ describe("compileDSAToExcalidraw", () => {
     expect(idx0?.x).toBe(100);
     expect(idx0?.y).toBe(200 + 54 + 8);
     expect(idx0?.groupIds).toEqual(["group_A"]);
+    expect(idx0?.lineHeight).toBe(1.25);
+    expect(idx0?.strokeColor).toBe("#52525b");
   });
 
   it("vertically stacks co-located pointers on the same index", () => {
