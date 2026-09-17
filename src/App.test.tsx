@@ -36,7 +36,7 @@ describe("App root component", () => {
     ).toBeInTheDocument();
   });
 
-  it("hides playback dock when switched to Teacher Mode", () => {
+  it("hides playback dock when switched to Teacher Mode and displays TeacherToolbox", () => {
     render(<App />);
 
     expect(screen.getByRole("toolbar", { name: /step playback controls/i })).toBeInTheDocument();
@@ -45,5 +45,26 @@ describe("App root component", () => {
     fireEvent.click(teacherBtn);
 
     expect(screen.queryByRole("toolbar", { name: /step playback controls/i })).not.toBeInTheDocument();
+    expect(screen.getByRole("toolbar", { name: /dsa teacher toolbox/i })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /\+ Array/i })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /\+ Pointer/i })).toBeInTheDocument();
+  });
+
+  it("renders array end-caps in Teacher Mode and supports appending and removing cells", () => {
+    render(<App />);
+
+    const teacherBtn = screen.getByRole("button", { name: /teacher mode/i });
+    fireEvent.click(teacherBtn);
+
+    const appendBtn = screen.getByRole("button", { name: /append cell/i });
+    const removeBtn = screen.getByRole("button", { name: /remove cell/i });
+
+    expect(appendBtn).toBeInTheDocument();
+    expect(removeBtn).toBeInTheDocument();
+
+    // Click append cell
+    fireEvent.click(appendBtn);
+    // Click remove cell
+    fireEvent.click(removeBtn);
   });
 });

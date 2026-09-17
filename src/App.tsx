@@ -2,7 +2,11 @@ import React, { useState, useMemo } from "react";
 import { Header, WorkspaceMode } from "./components/Header";
 import { WhiteboardCanvas } from "./components/WhiteboardCanvas";
 import { PlaybackDock } from "./components/PlaybackDock";
+import { TeacherToolbox } from "./components/TeacherToolbox";
+import { ArrayEndControls } from "./components/ArrayEndControls";
+import { CellInlineEditor, ActiveCellEdit } from "./components/CellInlineEditor";
 import { useAlgorithmPlayback } from "./hooks/useAlgorithmPlayback";
+import { useTeacherMode } from "./hooks/useTeacherMode";
 import { compileDSAToExcalidraw } from "./compiler/compileDSAToExcalidraw";
 import { ExecutionTrace } from "./engine/types";
 import "./App.css";
@@ -81,6 +85,7 @@ const canonicalTrace: ExecutionTrace = {
 
 export const App: React.FC = () => {
   const [mode, setMode] = useState<WorkspaceMode>("student");
+  const [activeEdit, setActiveEdit] = useState<ActiveCellEdit | null>(null);
 
   const initialStep = useMemo(() => {
     if (typeof window === "undefined") return 0;
@@ -89,20 +94,49 @@ export const App: React.FC = () => {
     return isNaN(s) ? 0 : s;
   }, []);
 
+  // Student mode playback
   const {
     currentStep,
     totalSteps,
     isPlaying,
     isRapidStepping,
-    currentState,
+    currentState: studentState,
     stepTo,
     togglePlay,
-    reset,
+    reset: resetPlayback,
   } = useAlgorithmPlayback(canonicalTrace, { initialStep });
 
+  // Teacher mode authoring
+  const {
+    state: teacherRawState,
+    dsaState: teacherState,
+    addArray,
+    updateCellValue,
+    appendCell,
+    removeCell,
+    addPointer,
+    movePointer,
+    resetTeacherState,
+  } = useTeacherMode();
+
+  const activeState = mode === "teacher" ? teacherState : studentState;
+
   const compiledElements = useMemo(() => {
-    return compileDSAToExcalidraw(currentState);
-  }, [currentState]);
+    return compileDSAToExcalidraw(activeState);
+  }, [activeState]);
+
+  const handleCommitCellEdit = (
+    arrayId: string,
+    index: number,
+    value: number | string
+  ) => {
+    updateCellValue(arrayId, index, value);
+    setActiveEdit(null);
+  };
+
+  const handleCancelCellEdit = () => {
+    setActiveEdit(null);
+  };
 
   return (
     <div className="app-container">
@@ -112,7 +146,11 @@ export const App: React.FC = () => {
           mode={mode}
           initialElements={compiledElements}
           isRapidStepping={isRapidStepping}
+          onCellDoubleClick={setActiveEdit}
+          onPointerSnap={movePointer}
         />
+
+        {/* Student Mode: Playback Dock */}
         {mode === "student" && (
           <PlaybackDock
             currentStep={currentStep}
@@ -120,8 +158,32 @@ export const App: React.FC = () => {
             isPlaying={isPlaying}
             onStepChange={stepTo}
             onTogglePlay={togglePlay}
-            onReset={reset}
+            onReset={resetPlayback}
           />
+        )}
+
+        {/* Teacher Mode: Authoring Tools */}
+        {mode === "teacher" && (
+          <>
+            <ArrayEndControls
+              arrays={teacherRawState.arrays}
+              onAppendCell={appendCell}
+              onRemoveCell={removeCell}
+            />
+            <TeacherToolbox
+              arrays={teacherRawState.arrays}
+              onAddArray={addArray}
+              onAddPointer={(arrayId, name, color) =>
+                addPointer(arrayId, name, 0, color)
+              }
+              onReset={resetTeacherState}
+            />
+            <CellInlineEditor
+              activeEdit={activeEdit}
+              onCommit={handleCommitCellEdit}
+              onCancel={handleCancelCellEdit}
+            />
+          </>
         )}
       </main>
     </div>
