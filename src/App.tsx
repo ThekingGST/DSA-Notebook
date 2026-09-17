@@ -84,7 +84,13 @@ const canonicalTrace: ExecutionTrace = {
 };
 
 export const App: React.FC = () => {
-  const [mode, setMode] = useState<WorkspaceMode>("student");
+  const initialMode = useMemo<WorkspaceMode>(() => {
+    if (typeof window === "undefined") return "student";
+    const params = new URLSearchParams(window.location.search);
+    return params.get("mode") === "teacher" ? "teacher" : "student";
+  }, []);
+
+  const [mode, setMode] = useState<WorkspaceMode>(initialMode);
   const [activeEdit, setActiveEdit] = useState<ActiveCellEdit | null>(null);
 
   const initialStep = useMemo(() => {
