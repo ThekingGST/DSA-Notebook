@@ -1,4 +1,4 @@
-import { useState, useCallback } from "react";
+import { useState, useCallback, useMemo } from "react";
 import { DSAArray, DSAPointer, DSAVariable, DSAState } from "../engine/types";
 
 export interface TeacherState {
@@ -48,10 +48,12 @@ export function useTeacherMode(initialState?: Partial<TeacherState>) {
 
   const setActivePointerForArray = useCallback((arrayId: string, pointerId: string) => {
     setActivePointerId(pointerId);
-    setActivePointersByArray((prev) => ({
-      ...prev,
-      [arrayId]: pointerId,
-    }));
+    setActivePointersByArray((prev) => {
+      // Bail out with same reference if nothing changed — prevents spurious re-renders
+      // that would otherwise cause commitScene → onChange → onPointerSelect loops.
+      if (prev[arrayId] === pointerId) return prev;
+      return { ...prev, [arrayId]: pointerId };
+    });
   }, []);
 
   const addArray = useCallback(
@@ -296,15 +298,21 @@ export function useTeacherMode(initialState?: Partial<TeacherState>) {
     []
   );
 
-  // Computed DSAState suitable for compileDSAToExcalidraw
-  const dsaState: DSAState = {
-    arrays: state.arrays,
-    pointers: state.pointers,
-    variables: state.variables,
-    activeComparison: null,
-    highlights: [],
-    narration: null,
-  };
+  // Memoize dsaState so it only gets a new reference when arrays/pointers/variables
+  // actually change — NOT when activePointerId or activePointersByArray change.
+  // This prevents onPointerSelect → setActivePointerForArray → dsaState new ref
+  // → compiledElements recompute → commitScene → onChange → onPointerSelect loops.
+  const dsaState: DSAState = useMemo(
+    () => ({
+      arrays: state.arrays,
+      pointers: state.pointers,
+      variables: state.variables,
+      activeComparison: null,
+      highlights: [],
+      narration: null,
+    }),
+    [state.arrays, state.pointers, state.variables]
+  );
 
   return {
     state,

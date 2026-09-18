@@ -15,9 +15,12 @@ describe("ArrayEndControls component", () => {
   ];
 
   it("renders [+] and [−] action buttons for array", () => {
+    const pointer = { id: "p1", name: "i", targetArrayId: "A", index: 1, color: "#8b5cf6" };
     render(
       <ArrayEndControls
         arrays={sampleArrays}
+        pointers={[pointer]}
+        activePointerId="p1"
         onAppendCell={vi.fn()}
         onRemoveCell={vi.fn()}
       />
@@ -29,9 +32,12 @@ describe("ArrayEndControls component", () => {
 
   it("calls onAppendCell when [+] is clicked", () => {
     const handleAppend = vi.fn();
+    const pointer = { id: "p1", name: "i", targetArrayId: "A", index: 1, color: "#8b5cf6" };
     render(
       <ArrayEndControls
         arrays={sampleArrays}
+        pointers={[pointer]}
+        activePointerId="p1"
         onAppendCell={handleAppend}
         onRemoveCell={vi.fn()}
       />
@@ -40,14 +46,18 @@ describe("ArrayEndControls component", () => {
     const appendBtn = screen.getByRole("button", { name: /append cell to nums/i });
     fireEvent.click(appendBtn);
 
-    expect(handleAppend).toHaveBeenCalledWith("A");
+    // safeIndex = clamp(0, 2, 1) = 1 — always passes index when pointer is active
+    expect(handleAppend).toHaveBeenCalledWith("A", undefined, 1);
   });
 
   it("calls onRemoveCell when [−] is clicked", () => {
     const handleRemove = vi.fn();
+    const pointer = { id: "p1", name: "i", targetArrayId: "A", index: 1, color: "#8b5cf6" };
     render(
       <ArrayEndControls
         arrays={sampleArrays}
+        pointers={[pointer]}
+        activePointerId="p1"
         onAppendCell={vi.fn()}
         onRemoveCell={handleRemove}
       />
@@ -56,7 +66,8 @@ describe("ArrayEndControls component", () => {
     const removeBtn = screen.getByRole("button", { name: /remove cell from nums/i });
     fireEvent.click(removeBtn);
 
-    expect(handleRemove).toHaveBeenCalledWith("A");
+    // safeIndex = clamp(0, 2, 1) = 1
+    expect(handleRemove).toHaveBeenCalledWith("A", 1);
   });
 
   it("disables [−] button when array length is 1", () => {
@@ -70,10 +81,13 @@ describe("ArrayEndControls component", () => {
         cellHeight: 56,
       },
     ];
+    const pointer = { id: "p1", name: "i", targetArrayId: "A", index: 0, color: "#8b5cf6" };
 
     render(
       <ArrayEndControls
         arrays={singleElementArray}
+        pointers={[pointer]}
+        activePointerId="p1"
         onAppendCell={vi.fn()}
         onRemoveCell={vi.fn()}
       />

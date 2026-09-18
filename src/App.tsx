@@ -132,6 +132,25 @@ export const App: React.FC = () => {
   } = useTeacherMode();
 
   const [viewport, setViewport] = useState({ scrollX: 0, scrollY: 0, zoom: 1 });
+  // Transient flag: set true only while an arrow-button navigation is playing so
+  // WhiteboardCanvas runs the smooth animation instead of snapping instantly.
+  const [isSmoothingPointer, setIsSmoothingPointer] = useState(false);
+  const smoothingTimeoutRef = React.useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  const smoothNavigatePointer = React.useCallback(
+    (pointerId: string, targetIndex: number) => {
+      // Clear any previous timeout so rapid clicks don't leave the flag stuck on
+      if (smoothingTimeoutRef.current) clearTimeout(smoothingTimeoutRef.current);
+      setIsSmoothingPointer(true);
+      movePointer(pointerId, targetIndex);
+      // 400ms > 300ms animation so the flag resets after the animation finishes
+      smoothingTimeoutRef.current = setTimeout(() => {
+        setIsSmoothingPointer(false);
+        smoothingTimeoutRef.current = null;
+      }, 400);
+    },
+    [movePointer]
+  );
 
   const activeState = mode === "teacher" ? teacherState : studentState;
 
@@ -163,6 +182,7 @@ export const App: React.FC = () => {
             mode={mode}
             initialElements={compiledElements}
             isRapidStepping={isRapidStepping}
+            isSmoothingPointer={isSmoothingPointer}
             onCellDoubleClick={setActiveEdit}
             onPointerSnap={movePointer}
             onPointerSelect={(ptrId) => {
@@ -228,7 +248,7 @@ export const App: React.FC = () => {
                 isEditing={activeEdit !== null}
                 onAppendCell={appendCell}
                 onRemoveCell={removeCell}
-                onNavigatePointer={movePointer}
+                onNavigatePointer={smoothNavigatePointer}
               />
               <TeacherToolbox
                 arrays={teacherRawState.arrays}

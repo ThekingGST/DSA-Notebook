@@ -44,6 +44,14 @@ export const ArrayEndControls: React.FC<ArrayEndControlsProps> = ({
         const activePtr =
           arrPointers.find((p) => p.id === activePtrId) || arrPointers[0];
 
+        // Arrow nav buttons are visible ONLY when the globally active pointer belongs
+        // to THIS specific array.  Using activePointersByArray as fallback caused every
+        // array with pointers to satisfy the condition simultaneously.
+        const activePtrIsForThisArray =
+          Boolean(activePointerId) && arrPointers.some((p) => p.id === activePointerId);
+        const showNavButtons =
+          activePtrIsForThisArray && Boolean(onNavigatePointer) && Boolean(activePtr);
+
         let screenX: number;
         let screenY: number;
         let targetIndex = arr.elements.length - 1;
@@ -71,22 +79,24 @@ export const ArrayEndControls: React.FC<ArrayEndControlsProps> = ({
 
         const canRemove = arr.elements.length > 1;
 
+        // Hide the entire pill — including + and − — when no pointer for this array
+        // is actively selected. All four buttons follow the same selection-based rule.
+        if (!activePtrIsForThisArray) return null;
+
         return (
           <div
             key={arr.id}
-            className={`array-end-pill ${hasPointers ? "contextual-active-pill" : ""}`}
+            className="array-end-pill contextual-active-pill"
             style={{
-              transform: hasPointers
-                ? `translate(calc(${screenX}px - 50%), ${screenY}px) scale(${zoom})`
-                : `translate(${screenX}px, ${screenY}px) scale(${zoom})`,
-              transformOrigin: hasPointers ? "top center" : "top left",
+              transform: `translate(calc(${screenX}px - 50%), ${screenY}px) scale(${zoom})`,
+              transformOrigin: "top center",
             }}
           >
-            {hasPointers && onNavigatePointer && activePtr && (
+            {showNavButtons && activePtr && (
               <button
                 type="button"
                 className="end-btn step-btn"
-                onClick={() => onNavigatePointer(activePtr.id, targetIndex - 1)}
+                onClick={() => onNavigatePointer!(activePtr.id, targetIndex - 1)}
                 disabled={targetIndex <= -1}
                 aria-label={`Move pointer ${activePtr.name} left`}
                 title="Move pointer left (◀)"
@@ -99,9 +109,7 @@ export const ArrayEndControls: React.FC<ArrayEndControlsProps> = ({
               className="end-btn append-btn"
               onClick={() => {
                 const safeIndex = Math.max(0, Math.min(arr.elements.length - 1, targetIndex));
-                return hasPointers
-                  ? onAppendCell(arr.id, undefined, safeIndex)
-                  : onAppendCell(arr.id);
+                return onAppendCell(arr.id, undefined, safeIndex);
               }}
               aria-label={`Append cell to ${arr.name}`}
               title="Add cell (+)"
@@ -113,9 +121,7 @@ export const ArrayEndControls: React.FC<ArrayEndControlsProps> = ({
               className="end-btn remove-btn"
               onClick={() => {
                 const safeIndex = Math.max(0, Math.min(arr.elements.length - 1, targetIndex));
-                return hasPointers
-                  ? onRemoveCell(arr.id, safeIndex)
-                  : onRemoveCell(arr.id);
+                return onRemoveCell(arr.id, safeIndex);
               }}
               disabled={!canRemove}
               aria-label={`Remove cell from ${arr.name}`}
@@ -124,11 +130,11 @@ export const ArrayEndControls: React.FC<ArrayEndControlsProps> = ({
               −
             </button>
 
-            {hasPointers && onNavigatePointer && activePtr && (
+            {showNavButtons && activePtr && (
               <button
                 type="button"
                 className="end-btn step-btn"
-                onClick={() => onNavigatePointer(activePtr.id, targetIndex + 1)}
+                onClick={() => onNavigatePointer!(activePtr.id, targetIndex + 1)}
                 disabled={targetIndex >= arr.elements.length}
                 aria-label={`Move pointer ${activePtr.name} right`}
                 title="Move pointer right (▶)"

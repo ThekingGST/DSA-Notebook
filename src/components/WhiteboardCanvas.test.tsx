@@ -53,6 +53,19 @@ describe("WhiteboardCanvas component", () => {
     };
   });
 
+  /**
+   * Simulates a full Excalidraw drag-and-release cycle:
+   * 1. Fire onChange with selectedElementsAreBeingDragged=true  (sets wasDraggingElementsRef)
+   * 2. Fire onChange with selectedElementsAreBeingDragged=false (drag release — triggers onArrayMove/onPointerSnap)
+   * The mock fires onChange via an onClick on the canvas element.
+   */
+  const simulateDrag = (canvas: HTMLElement) => {
+    mockAppState.selectedElementsAreBeingDragged = true;
+    fireEvent.click(canvas); // drag-start: sets wasDraggingElementsRef = true
+    mockAppState.selectedElementsAreBeingDragged = false;
+    fireEvent.click(canvas); // drag-release: triggers onArrayMove / onPointerSnap
+  };
+
   it("renders with compiled DSA initial elements", () => {
     const elements = compileDSAToExcalidraw({
       arrays: [
@@ -319,11 +332,10 @@ describe("WhiteboardCanvas component", () => {
     });
 
     mockSceneElements = movedCells;
-    mockAppState.selectedElementsAreBeingDragged = false;
     mockAppState.cursorButton = "up";
 
     const canvas = screen.getByTestId("mock-excalidraw-canvas");
-    fireEvent.click(canvas);
+    simulateDrag(canvas);
 
     expect(handleArrayMove).toHaveBeenCalledWith("A", { x: 250, y: 350 });
   });
@@ -353,11 +365,10 @@ describe("WhiteboardCanvas component", () => {
     });
 
     mockSceneElements = movedElements;
-    mockAppState.selectedElementsAreBeingDragged = false;
     mockAppState.cursorButton = "up";
 
     const canvas = screen.getByTestId("mock-excalidraw-canvas");
-    fireEvent.click(canvas);
+    simulateDrag(canvas);
 
     expect(handlePointerSnap).toHaveBeenCalledWith("p1", 2);
   });
@@ -446,11 +457,10 @@ describe("WhiteboardCanvas component", () => {
     });
 
     mockSceneElements = movedCells;
-    mockAppState.selectedElementsAreBeingDragged = false;
     mockAppState.cursorButton = "up";
 
     const canvas = screen.getByTestId("mock-excalidraw-canvas");
-    fireEvent.click(canvas);
+    simulateDrag(canvas);
 
     // Array move should be detected and recorded
     expect(handleArrayMove).toHaveBeenCalledWith("A", { x: 350, y: 300 });
@@ -490,11 +500,10 @@ describe("WhiteboardCanvas component", () => {
     mockSceneElements = movedCells;
     // When dragging array by cell 0, cell 0 is selected
     mockAppState.selectedElementIds = { cell_A_0: true };
-    mockAppState.selectedElementsAreBeingDragged = false;
     mockAppState.cursorButton = "up";
 
     const canvas = screen.getByTestId("mock-excalidraw-canvas");
-    fireEvent.click(canvas);
+    simulateDrag(canvas);
 
     expect(handleArrayMove).toHaveBeenCalledWith("A", { x: 200, y: 250 });
     // onCellClick must NOT be called on array drag
@@ -538,11 +547,10 @@ describe("WhiteboardCanvas component", () => {
 
     mockSceneElements = movedA;
     mockAppState.selectedElementIds = { cell_A_0: true };
-    mockAppState.selectedElementsAreBeingDragged = false;
     mockAppState.cursorButton = "up";
 
     const canvas = screen.getByTestId("mock-excalidraw-canvas");
-    fireEvent.click(canvas);
+    simulateDrag(canvas);
 
     // Array A moves
     expect(handleArrayMove).toHaveBeenCalledWith("A", { x: 180, y: 240 });

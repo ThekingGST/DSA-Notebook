@@ -10,6 +10,7 @@ export interface WhiteboardCanvasProps {
   mode: WorkspaceMode;
   initialElements?: ExcalidrawCompiledElement[];
   isRapidStepping?: boolean;
+  isSmoothingPointer?: boolean;
   onCellDoubleClick?: (edit: ActiveCellEdit) => void;
   onPointerSnap?: (pointerId: string, targetIndex: number) => void;
   onArrayMove?: (arrayId: string, position: { x: number; y: number }) => void;
@@ -22,6 +23,7 @@ export const WhiteboardCanvas: React.FC<WhiteboardCanvasProps> = ({
   mode,
   initialElements = [],
   isRapidStepping = false,
+  isSmoothingPointer = false,
   onCellDoubleClick,
   onPointerSnap,
   onArrayMove,
@@ -41,6 +43,7 @@ export const WhiteboardCanvas: React.FC<WhiteboardCanvasProps> = ({
   const lastKnownArrayPositionsRef = useRef<Map<string, { x: number; y: number }>>(new Map());
   const lastViewportRef = useRef({ scrollX: 0, scrollY: 0, zoom: 1 });
   const lastSelectedCellRef = useRef<string | null>(null);
+  const lastSelectedPtrRef = useRef<string | null>(null);
   const wasDraggingElementsRef = useRef(false);
   const pointerDownPosRef = useRef<{ x: number; y: number } | null>(null);
   const isDragInteractionRef = useRef(false);
@@ -125,8 +128,11 @@ export const WhiteboardCanvas: React.FC<WhiteboardCanvasProps> = ({
       }
     });
 
-    // If rapid stepping, teacher mode authoring, initial render, or no pointer moved: snap instantly
-    if (isRapidStepping || mode === "teacher" || movingPointers.length === 0) {
+    // If rapid stepping, or teacher mode (unless arrow-button smooth navigation is active),
+    // or no pointer actually moved: snap instantly.
+    // isSmoothingPointer=true lets the arrow buttons play the 300ms cubic-ease animation.
+    const skipAnimation = isRapidStepping || (mode === "teacher" && !isSmoothingPointer) || movingPointers.length === 0;
+    if (skipAnimation) {
       targetPointers.forEach((p) => {
         currentPointers.set(p.id, { x: p.x, y: p.y });
       });
@@ -195,7 +201,7 @@ export const WhiteboardCanvas: React.FC<WhiteboardCanvasProps> = ({
         animFrameRef.current = null;
       }
     };
-  }, [excalidrawAPI, initialElements, isRapidStepping, commitScene]);
+  }, [excalidrawAPI, initialElements, isRapidStepping, isSmoothingPointer, commitScene]);
 
   // Handle double clicking a cell in Teacher Mode for in-place editing
   const handleDoubleClick = () => {
@@ -329,7 +335,9 @@ export const WhiteboardCanvas: React.FC<WhiteboardCanvasProps> = ({
     const movedArrayIds = new Set<string>();
 
     // Track array movement and sync position to state
-    if (onArrayMove && !isDragging) {
+    // Only report array moves when the user actually dragged (wasDraggingElementsRef tells us
+    // this was a user-initiated drag, not a state-driven canvas update from commitScene).
+    if (onArrayMove && !isDragging && wasDraggingElementsRef.current) {
       const cellsByArray: Record<string, any[]> = {};
       elements.forEach((el) => {
         if (el.customData?.dsaType === "cell" && el.customData.arrayId) {
@@ -353,6 +361,14 @@ export const WhiteboardCanvas: React.FC<WhiteboardCanvasProps> = ({
             lastKnownArrayPositionsRef.current.set(arrId, { x: cell0.x, y: cell0.y });
             onArrayMove(arrId, { x: cell0.x, y: cell0.y });
           }
+        }
+      });
+    } else if (!isDragging) {
+      // Always keep lastKnownArrayPositions in sync so we can detect real drags later.
+      // Do NOT call onArrayMove — this is just a canvas re-render from state updates.
+      elements.forEach((el) => {
+        if (el.customData?.dsaType === "cell" && el.customData?.index === 0 && el.customData.arrayId) {
+          lastKnownArrayPositionsRef.current.set(el.customData.arrayId as string, { x: el.x, y: el.y });
         }
       });
     }
@@ -387,9 +403,17 @@ export const WhiteboardCanvas: React.FC<WhiteboardCanvasProps> = ({
               (Math.abs(lastCanvasPos.x - el.x) > 3 || Math.abs(lastCanvasPos.y - el.y) > 3)
             );
 
-            // Strictly snap ONLY if the pointer itself was moved on canvas
-            // and its target array was not being moved
-            if (isPointerMoved && !movedArrayIds.has(targetArrayId)) {
+            // Snap ONLY if:
+            //   1. The pointer actually moved on canvas (user dragged it)
+            //   2. Its target array was NOT being moved simultaneously
+            //   3. The user physically dragged something (wasDraggingElementsRef is set)
+            //
+            // Condition 3 prevents a re-render loop:
+            //   onCellClick → movePointer → commitScene → onChange → isPointerMoved=true
+            //   → onPointerSnap → movePointer → commitScene → … (infinite)
+            // State-driven re-renders (from commitScene) do NOT set wasDraggingElementsRef,
+            // so they fall through to the else branch which just syncs coords.
+            if (isPointerMoved && !movedArrayIds.has(targetArrayId) && wasDraggingElementsRef.current) {
               const rawIdx = Math.round((ptrCenterX - cell0.x - cellW / 2) / cellW);
               const maxIdx = arrayCells.length;
               const snappedIdx = Math.max(-1, Math.min(maxIdx, rawIdx));
@@ -404,7 +428,8 @@ export const WhiteboardCanvas: React.FC<WhiteboardCanvasProps> = ({
                 lastKnownPointerCanvasCoordsRef.current.set(pointerId, { x: el.x, y: el.y });
               }
             } else {
-              // Keep canvas coordinates up to date so future pointer drags calculate correctly
+              // Always keep canvas coords in sync (covers state-driven re-renders,
+              // array drags, and the first onChange after a snap fires).
               lastKnownPointerCanvasCoordsRef.current.set(pointerId, { x: el.x, y: el.y });
             }
           }
@@ -427,7 +452,10 @@ export const WhiteboardCanvas: React.FC<WhiteboardCanvasProps> = ({
     if (!isDragging && appState.selectedElementIds) {
       const selectedIds = Object.keys(appState.selectedElementIds);
 
-      // If a pointer was clicked, activate it
+      // If a pointer was clicked, activate it — but only if it's a newly selected pointer.
+      // Without this dedup, the following loop occurs:
+      //   onPointerSelect → setState (activePointersByArray) → re-render → commitScene
+      //   → onChange → same pointer still selected → onPointerSelect again → …
       const selectedPtr = elements.find(
         (el) =>
           selectedIds.includes(el.id) &&
@@ -435,7 +463,13 @@ export const WhiteboardCanvas: React.FC<WhiteboardCanvasProps> = ({
       );
       if (selectedPtr && onPointerSelect && !isDragOrMove) {
         const ptrId = (selectedPtr.customData.pointerId as string) || selectedPtr.id.replace(/^ptr_/, "");
-        onPointerSelect(ptrId);
+        if (ptrId !== lastSelectedPtrRef.current) {
+          lastSelectedPtrRef.current = ptrId;
+          onPointerSelect(ptrId);
+        }
+      } else if (!selectedPtr) {
+        // Pointer was deselected — clear so next selection fires correctly.
+        lastSelectedPtrRef.current = null;
       }
 
       // If a single cell was clicked (not a group/array selection and not a drag), navigate active pointer to it
