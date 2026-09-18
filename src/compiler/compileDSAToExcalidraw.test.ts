@@ -108,4 +108,22 @@ describe("compileDSAToExcalidraw", () => {
     expect(narrationElement).toBeDefined();
     expect(narrationElement?.text).toContain("Step 1");
   });
+
+  it("supports standalonePointers option for Teacher Mode independent pointer dragging", () => {
+    const elements = compileDSAToExcalidraw(sampleState, { standalonePointers: true });
+    const ptr1 = elements.find((e) => e.id === "ptr_p1");
+
+    expect(ptr1).toBeDefined();
+    expect(ptr1?.groupIds).toEqual(["ptr_group_p1"]);
+    expect(ptr1?.groupIds).not.toContain("group_A");
+  });
+
+  it("produces deterministic seeds based on element IDs", () => {
+    const el1 = compileDSAToExcalidraw(sampleState);
+    const el2 = compileDSAToExcalidraw(sampleState);
+
+    const cell1 = el1.find((e) => e.id === "cell_A_0");
+    const cell2 = el2.find((e) => e.id === "cell_A_0");
+    expect(cell1?.seed).toBe(cell2?.seed);
+  });
 });

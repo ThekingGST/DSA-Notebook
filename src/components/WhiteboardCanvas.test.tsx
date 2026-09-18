@@ -1,22 +1,36 @@
 import { useEffect } from "react";
-import { render, screen } from "@testing-library/react";
-import { describe, it, expect, vi } from "vitest";
+import { render, screen, fireEvent } from "@testing-library/react";
+import { describe, it, expect, vi, beforeEach } from "vitest";
 import { WhiteboardCanvas } from "./WhiteboardCanvas";
 import { compileDSAToExcalidraw } from "../compiler/compileDSAToExcalidraw";
 
 let mockUpdateScene = vi.fn();
+let mockSceneElements: any[] = [];
+let mockAppState: any = {
+  scrollX: 0,
+  scrollY: 0,
+  zoom: { value: 1 },
+  selectedElementIds: {},
+};
 
 vi.mock("@excalidraw/excalidraw", () => ({
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  Excalidraw: ({ excalidrawAPI, initialData }: any) => {
+  Excalidraw: ({ excalidrawAPI, initialData, onChange }: any) => {
     useEffect(() => {
       if (excalidrawAPI) {
-        excalidrawAPI({ updateScene: mockUpdateScene });
+        excalidrawAPI({
+          updateScene: mockUpdateScene,
+          getSceneElements: () => mockSceneElements,
+          getAppState: () => mockAppState,
+        });
       }
       // eslint-disable-next-line react-hooks/exhaustive-deps
     }, []);
     return (
-      <div data-testid="mock-excalidraw-canvas">
+      <div
+        data-testid="mock-excalidraw-canvas"
+        onClick={() => onChange?.(mockSceneElements, mockAppState)}
+      >
         Excalidraw Mock ({initialData?.elements?.length || 0} elements)
       </div>
     );
@@ -24,8 +38,35 @@ vi.mock("@excalidraw/excalidraw", () => ({
 }));
 
 describe("WhiteboardCanvas component", () => {
+  beforeEach(() => {
+    mockUpdateScene = vi.fn((scene) => {
+      if (scene?.elements) {
+        mockSceneElements = scene.elements;
+      }
+    });
+    mockSceneElements = [];
+    mockAppState = {
+      scrollX: 0,
+      scrollY: 0,
+      zoom: { value: 1 },
+      selectedElementIds: {},
+    };
+  });
+
+  /**
+   * Simulates a full Excalidraw drag-and-release cycle:
+   * 1. Fire onChange with selectedElementsAreBeingDragged=true  (sets wasDraggingElementsRef)
+   * 2. Fire onChange with selectedElementsAreBeingDragged=false (drag release — triggers onArrayMove/onPointerSnap)
+   * The mock fires onChange via an onClick on the canvas element.
+   */
+  const simulateDrag = (canvas: HTMLElement) => {
+    mockAppState.selectedElementsAreBeingDragged = true;
+    fireEvent.click(canvas); // drag-start: sets wasDraggingElementsRef = true
+    mockAppState.selectedElementsAreBeingDragged = false;
+    fireEvent.click(canvas); // drag-release: triggers onArrayMove / onPointerSnap
+  };
+
   it("renders with compiled DSA initial elements", () => {
-    mockUpdateScene = vi.fn();
     const elements = compileDSAToExcalidraw({
       arrays: [
         {
@@ -46,7 +87,6 @@ describe("WhiteboardCanvas component", () => {
   });
 
   it("snaps pointer immediately when isRapidStepping is true", () => {
-    mockUpdateScene = vi.fn();
     const state0 = {
       arrays: [
         {
@@ -81,13 +121,14 @@ describe("WhiteboardCanvas component", () => {
     // Under rapid stepping, it should immediately commit the target elements
     expect(mockUpdateScene).toHaveBeenCalledWith(
       expect.objectContaining({
-        elements: elements1,
+        elements: expect.arrayContaining([
+          expect.objectContaining({ id: "ptr_p1" }),
+        ]),
       })
     );
   });
 
   it("glides smoothly via requestAnimationFrame when isRapidStepping is false", () => {
-    mockUpdateScene = vi.fn();
     const rafSpy = vi.spyOn(window, "requestAnimationFrame");
 
     const state0 = {
@@ -127,7 +168,6 @@ describe("WhiteboardCanvas component", () => {
   });
 
   it("cancels in-flight smooth glide and snaps immediately when rapid stepping interrupts", () => {
-    mockUpdateScene = vi.fn();
     const cancelSpy = vi.spyOn(window, "cancelAnimationFrame");
 
     const state0 = {
@@ -170,11 +210,353 @@ describe("WhiteboardCanvas component", () => {
     // Step 2 elements should be committed immediately
     expect(mockUpdateScene).toHaveBeenCalledWith(
       expect.objectContaining({
-        elements: elements2,
+        elements: expect.arrayContaining([
+          expect.objectContaining({ id: "ptr_p1" }),
+        ]),
       })
     );
 
     cancelSpy.mockRestore();
+  });
+
+  it("preserves non-DSA user drawings and shapes when updating scenes", () => {
+    // Inject a non-DSA user freehand element
+    const freehandElement = {
+      id: "freehand_1",
+      type: "freedraw",
+      x: 50,
+      y: 50,
+      points: [[0, 0], [10, 10]],
+    };
+    mockSceneElements = [freehandElement];
+
+    const dsaElements = compileDSAToExcalidraw({
+      arrays: [{ id: "A", name: "nums", elements: [1, 2], position: { x: 100, y: 200 } }],
+      pointers: [],
+      variables: [],
+    });
+
+    render(<WhiteboardCanvas mode="teacher" initialElements={dsaElements} />);
+
+    // Commit should preserve freehand_1 alongside DSA elements
+    expect(mockUpdateScene).toHaveBeenCalledWith(
+      expect.objectContaining({
+        elements: expect.arrayContaining([
+          expect.objectContaining({ id: "freehand_1" }),
+          expect.objectContaining({ id: "cell_A_0" }),
+        ]),
+      })
+    );
+  });
+
+  it("triggers onCellDoubleClick when double clicking an array cell in Teacher Mode", () => {
+    const handleCellDoubleClick = vi.fn();
+    const dsaElements = compileDSAToExcalidraw({
+      arrays: [{ id: "A", name: "nums", elements: [10, 20], position: { x: 100, y: 200 } }],
+      pointers: [],
+      variables: [],
+    });
+
+    mockSceneElements = [...dsaElements];
+    mockAppState.selectedElementIds = { cell_A_1: true };
+
+    render(
+      <WhiteboardCanvas
+        mode="teacher"
+        initialElements={dsaElements}
+        onCellDoubleClick={handleCellDoubleClick}
+      />
+    );
+
+    const wrapper = screen.getByTestId("whiteboard-wrapper");
+    fireEvent.doubleClick(wrapper);
+
+    expect(handleCellDoubleClick).toHaveBeenCalledWith(
+      expect.objectContaining({
+        arrayId: "A",
+        index: 1,
+        initialValue: "20",
+      })
+    );
+  });
+
+  it("preserves scrollX, scrollY, and zoom when committing scene updates", () => {
+    mockAppState = {
+      scrollX: 120,
+      scrollY: -80,
+      zoom: { value: 1.5 },
+      selectedElementIds: {},
+    };
+
+    const dsaElements = compileDSAToExcalidraw({
+      arrays: [{ id: "A", name: "nums", elements: [10], position: { x: 100, y: 200 } }],
+      pointers: [],
+      variables: [],
+    });
+
+    render(<WhiteboardCanvas mode="teacher" initialElements={dsaElements} />);
+
+    expect(mockUpdateScene).toHaveBeenCalledWith(
+      expect.objectContaining({
+        appState: expect.objectContaining({
+          scrollX: 120,
+          scrollY: -80,
+          zoom: { value: 1.5 },
+        }),
+      })
+    );
+  });
+
+  it("triggers onArrayMove when array elements are dragged in Excalidraw", () => {
+    const handleArrayMove = vi.fn();
+    const dsaElements = compileDSAToExcalidraw({
+      arrays: [{ id: "A", name: "nums", elements: [10, 20], position: { x: 100, y: 200 } }],
+      pointers: [],
+      variables: [],
+    });
+
+    render(
+      <WhiteboardCanvas
+        mode="teacher"
+        initialElements={dsaElements}
+        onArrayMove={handleArrayMove}
+      />
+    );
+
+    // Simulate Excalidraw dragging array to x: 250, y: 350
+    const movedCells = dsaElements.map((el) => {
+      if (el.customData?.dsaType === "cell") {
+        return { ...el, x: el.x + 150, y: el.y + 150 };
+      }
+      return el;
+    });
+
+    mockSceneElements = movedCells;
+    mockAppState.cursorButton = "up";
+
+    const canvas = screen.getByTestId("mock-excalidraw-canvas");
+    simulateDrag(canvas);
+
+    expect(handleArrayMove).toHaveBeenCalledWith("A", { x: 250, y: 350 });
+  });
+
+  it("triggers onPointerSnap when a pointer is dragged to a different index", () => {
+    const handlePointerSnap = vi.fn();
+    const dsaElements = compileDSAToExcalidraw({
+      arrays: [{ id: "A", name: "nums", elements: [10, 20, 30, 40], position: { x: 100, y: 200 } }],
+      pointers: [{ id: "p1", name: "i", targetArrayId: "A", index: 0 }],
+      variables: [],
+    }, { standalonePointers: true });
+
+    render(
+      <WhiteboardCanvas
+        mode="teacher"
+        initialElements={dsaElements}
+        onPointerSnap={handlePointerSnap}
+      />
+    );
+
+    // Simulate pointer being dragged from cell 0 (x ~ 100) to cell 2 (x ~ 240)
+    const movedElements = dsaElements.map((el) => {
+      if (el.customData?.dsaType === "pointer") {
+        return { ...el, x: el.x + 140 }; // Moved 2 cells over (70px * 2)
+      }
+      return el;
+    });
+
+    mockSceneElements = movedElements;
+    mockAppState.cursorButton = "up";
+
+    const canvas = screen.getByTestId("mock-excalidraw-canvas");
+    simulateDrag(canvas);
+
+    expect(handlePointerSnap).toHaveBeenCalledWith("p1", 2);
+  });
+
+  it("triggers onPointerSelect when a pointer element is clicked", () => {
+    const handlePointerSelect = vi.fn();
+    const dsaElements = compileDSAToExcalidraw({
+      arrays: [{ id: "A", name: "nums", elements: [10, 20], position: { x: 100, y: 200 } }],
+      pointers: [{ id: "p1", name: "i", targetArrayId: "A", index: 0 }],
+      variables: [],
+    }, { standalonePointers: true });
+
+    render(
+      <WhiteboardCanvas
+        mode="teacher"
+        initialElements={dsaElements}
+        onPointerSelect={handlePointerSelect}
+      />
+    );
+
+    mockSceneElements = dsaElements;
+    mockAppState.selectedElementIds = { ptr_p1: true };
+    mockAppState.selectedElementsAreBeingDragged = false;
+    mockAppState.cursorButton = "up";
+
+    const canvas = screen.getByTestId("mock-excalidraw-canvas");
+    fireEvent.click(canvas);
+
+    expect(handlePointerSelect).toHaveBeenCalledWith("p1");
+  });
+
+  it("triggers onCellClick when a cell is clicked to navigate the active pointer", () => {
+    const handleCellClick = vi.fn();
+    const dsaElements = compileDSAToExcalidraw({
+      arrays: [{ id: "A", name: "nums", elements: [10, 20, 30], position: { x: 100, y: 200 } }],
+      pointers: [{ id: "p1", name: "i", targetArrayId: "A", index: 0 }],
+      variables: [],
+    });
+
+    render(
+      <WhiteboardCanvas
+        mode="teacher"
+        initialElements={dsaElements}
+        onCellClick={handleCellClick}
+      />
+    );
+
+    mockSceneElements = dsaElements;
+    mockAppState.selectedElementIds = { cell_A_2: true };
+    mockAppState.selectedElementsAreBeingDragged = false;
+    mockAppState.cursorButton = "up";
+
+    const canvas = screen.getByTestId("mock-excalidraw-canvas");
+    fireEvent.click(canvas);
+
+    expect(handleCellClick).toHaveBeenCalledWith("A", 2);
+  });
+
+  it("does NOT trigger onPointerSnap when an array is dragged on canvas", () => {
+    const handlePointerSnap = vi.fn();
+    const handleArrayMove = vi.fn();
+    const dsaElements = compileDSAToExcalidraw(
+      {
+        arrays: [{ id: "A", name: "nums", elements: [10, 20, 30, 40], position: { x: 100, y: 200 } }],
+        pointers: [{ id: "p1", name: "i", targetArrayId: "A", index: 2 }],
+        variables: [],
+      },
+      { standalonePointers: true }
+    );
+
+    render(
+      <WhiteboardCanvas
+        mode="teacher"
+        initialElements={dsaElements}
+        onPointerSnap={handlePointerSnap}
+        onArrayMove={handleArrayMove}
+      />
+    );
+
+    // Simulate moving array cells from x: 100 to x: 350
+    const movedCells = dsaElements.map((el) => {
+      if (el.customData?.dsaType === "cell") {
+        return { ...el, x: el.x + 250, y: el.y + 100 };
+      }
+      return el;
+    });
+
+    mockSceneElements = movedCells;
+    mockAppState.cursorButton = "up";
+
+    const canvas = screen.getByTestId("mock-excalidraw-canvas");
+    simulateDrag(canvas);
+
+    // Array move should be detected and recorded
+    expect(handleArrayMove).toHaveBeenCalledWith("A", { x: 350, y: 300 });
+    // Pointer snap must NOT be called since the pointer itself was not moved
+    expect(handlePointerSnap).not.toHaveBeenCalled();
+  });
+
+  it("does NOT trigger onCellClick when an array is moved even if a cell is in selectedElementIds", () => {
+    const handleCellClick = vi.fn();
+    const handleArrayMove = vi.fn();
+    const dsaElements = compileDSAToExcalidraw(
+      {
+        arrays: [{ id: "A", name: "nums", elements: [10, 20, 30], position: { x: 100, y: 200 } }],
+        pointers: [{ id: "p1", name: "i", targetArrayId: "A", index: 2 }],
+        variables: [],
+      },
+      { standalonePointers: true }
+    );
+
+    render(
+      <WhiteboardCanvas
+        mode="teacher"
+        initialElements={dsaElements}
+        onCellClick={handleCellClick}
+        onArrayMove={handleArrayMove}
+      />
+    );
+
+    // Simulate moving array cells
+    const movedCells = dsaElements.map((el) => {
+      if (el.customData?.dsaType === "cell") {
+        return { ...el, x: el.x + 100, y: el.y + 50 };
+      }
+      return el;
+    });
+
+    mockSceneElements = movedCells;
+    // When dragging array by cell 0, cell 0 is selected
+    mockAppState.selectedElementIds = { cell_A_0: true };
+    mockAppState.cursorButton = "up";
+
+    const canvas = screen.getByTestId("mock-excalidraw-canvas");
+    simulateDrag(canvas);
+
+    expect(handleArrayMove).toHaveBeenCalledWith("A", { x: 200, y: 250 });
+    // onCellClick must NOT be called on array drag
+    expect(handleCellClick).not.toHaveBeenCalled();
+  });
+
+  it("isolates pointer movement and snapping between dual arrays", () => {
+    const handlePointerSnap = vi.fn();
+    const handleArrayMove = vi.fn();
+    const dsaElements = compileDSAToExcalidraw(
+      {
+        arrays: [
+          { id: "A", name: "arr1", elements: [10, 20, 30], position: { x: 100, y: 200 } },
+          { id: "B", name: "arr2", elements: [40, 50, 60], position: { x: 100, y: 400 } },
+        ],
+        pointers: [
+          { id: "p1", name: "i", targetArrayId: "A", index: 2 },
+          { id: "p2", name: "j", targetArrayId: "B", index: 1 },
+        ],
+        variables: [],
+      },
+      { standalonePointers: true }
+    );
+
+    render(
+      <WhiteboardCanvas
+        mode="teacher"
+        initialElements={dsaElements}
+        onPointerSnap={handlePointerSnap}
+        onArrayMove={handleArrayMove}
+      />
+    );
+
+    // Simulate moving Array A only
+    const movedA = dsaElements.map((el) => {
+      if (el.customData?.dsaType === "cell" && el.customData.arrayId === "A") {
+        return { ...el, x: el.x + 80, y: el.y + 40 };
+      }
+      return el;
+    });
+
+    mockSceneElements = movedA;
+    mockAppState.selectedElementIds = { cell_A_0: true };
+    mockAppState.cursorButton = "up";
+
+    const canvas = screen.getByTestId("mock-excalidraw-canvas");
+    simulateDrag(canvas);
+
+    // Array A moves
+    expect(handleArrayMove).toHaveBeenCalledWith("A", { x: 180, y: 240 });
+    expect(handleArrayMove).not.toHaveBeenCalledWith("B", expect.anything());
+    // Neither pointer snaps or resets
+    expect(handlePointerSnap).not.toHaveBeenCalled();
   });
 });
 

@@ -1,0 +1,52 @@
+.error-boundary-fallback {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 100vw;
+  height: 100vh;
+  background: #121214;
+  color: #f4f4f5;
+  font-family: inherit;
+}
+
+.error-card {
+  max-width: 480px;
+  padding: 32px;
+  background: #18181b;
+  border: 1px solid rgba(239, 68, 68, 0.4);
+  border-radius: 12px;
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.5);
+  text-align: center;
+}
+
+.error-card h2 {
+  margin-top: 0;
+  margin-bottom: 12px;
+  color: #ef4444;
+  font-size: 20px;
+}
+
+.error-message {
+  margin-bottom: 24px;
+  font-size: 14px;
+  color: #a1a1aa;
+  line-height: 1.5;
+  word-break: break-word;
+}
+
+.error-reload-btn {
+  padding: 10px 20px;
+  background: #8b5cf6;
+  color: #ffffff;
+  border: none;
+  border-radius: 8px;
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.15s ease-in-out;
+}
+
+.error-reload-btn:hover {
+  background: #7c3aed;
+  box-shadow: 0 0 12px rgba(139, 92, 246, 0.6);
+}

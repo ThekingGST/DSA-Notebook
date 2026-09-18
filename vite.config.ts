@@ -1,8 +1,18 @@
 import { defineConfig, configDefaults } from "vitest/config";
+import { searchForWorkspaceRoot } from "vite";
 import react from "@vitejs/plugin-react";
 
 export default defineConfig({
   plugins: [react()],
+  server: {
+    fs: {
+      allow: [
+        searchForWorkspaceRoot(process.cwd()),
+        "../../node_modules",
+      ],
+    },
+  },
+
   define: {
     "process.env.IS_PREACT": JSON.stringify("true"),
   },
@@ -13,3 +23,4 @@ export default defineConfig({
     exclude: [...configDefaults.exclude, ".worktrees/**"],
   },
 });
+

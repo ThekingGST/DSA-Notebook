@@ -1,41 +1,99 @@
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useState, useCallback, useRef } from "react";
 import { Excalidraw } from "@excalidraw/excalidraw";
 import "@excalidraw/excalidraw/index.css";
 import "./WhiteboardCanvas.css";
 import { WorkspaceMode } from "./Header";
 import { ExcalidrawCompiledElement } from "../compiler/compileDSAToExcalidraw";
+import { ActiveCellEdit } from "./CellInlineEditor";
 
-interface WhiteboardCanvasProps {
+export interface WhiteboardCanvasProps {
   mode: WorkspaceMode;
   initialElements?: ExcalidrawCompiledElement[];
   isRapidStepping?: boolean;
+  isSmoothingPointer?: boolean;
+  onCellDoubleClick?: (edit: ActiveCellEdit) => void;
+  onPointerSnap?: (pointerId: string, targetIndex: number) => void;
+  onArrayMove?: (arrayId: string, position: { x: number; y: number }) => void;
+  onCellClick?: (arrayId: string, index: number) => void;
+  onPointerSelect?: (pointerId: string) => void;
+  onViewportChange?: (viewport: { scrollX: number; scrollY: number; zoom: number }) => void;
 }
 
 export const WhiteboardCanvas: React.FC<WhiteboardCanvasProps> = ({
   mode,
   initialElements = [],
   isRapidStepping = false,
+  isSmoothingPointer = false,
+  onCellDoubleClick,
+  onPointerSnap,
+  onArrayMove,
+  onCellClick,
+  onPointerSelect,
+  onViewportChange,
 }) => {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const [excalidrawAPI, setExcalidrawAPI] = useState<any>(null);
-  const handleExcalidrawAPI = React.useCallback((api: any) => {
+  const handleExcalidrawAPI = useCallback((api: any) => {
     setExcalidrawAPI(api);
   }, []);
-  const currentPointersRef = React.useRef<Map<string, { x: number; y: number }>>(new Map());
-  const animFrameRef = React.useRef<number | null>(null);
+  const currentPointersRef = useRef<Map<string, { x: number; y: number }>>(new Map());
+  const animFrameRef = useRef<number | null>(null);
+  const lastKnownPointerPositionsRef = useRef<Map<string, number>>(new Map());
+  const lastKnownPointerCanvasCoordsRef = useRef<Map<string, { x: number; y: number }>>(new Map());
+  const lastKnownArrayPositionsRef = useRef<Map<string, { x: number; y: number }>>(new Map());
+  const lastViewportRef = useRef({ scrollX: 0, scrollY: 0, zoom: 1 });
+  const lastSelectedCellRef = useRef<string | null>(null);
+  const lastSelectedPtrRef = useRef<string | null>(null);
+  const wasDraggingElementsRef = useRef(false);
+  const pointerDownPosRef = useRef<{ x: number; y: number } | null>(null);
+  const isDragInteractionRef = useRef(false);
+  const dragInteractionTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  useEffect(() => {
-    if (!excalidrawAPI) return;
+  const commitScene = useCallback(
+    (elements: ExcalidrawCompiledElement[]) => {
+      if (!excalidrawAPI) return;
 
-    const commitScene = (elements: ExcalidrawCompiledElement[]) => {
+      // Preserve existing non-DSA elements (e.g. teacher's freehand drawings, arrows, shapes)
+      let nonDsaElements: any[] = [];
+      try {
+        const sceneElements = excalidrawAPI.getSceneElements?.() || [];
+        nonDsaElements = sceneElements.filter((el: any) => !el.customData?.dsaType);
+      } catch {
+        nonDsaElements = [];
+      }
+
+      const currentAppState = excalidrawAPI.getAppState?.() || {};
       excalidrawAPI.updateScene({
-        elements,
+        elements: [...nonDsaElements, ...elements],
         appState: {
           theme: "dark",
           viewBackgroundColor: "#ffffff",
+          scrollX: currentAppState.scrollX,
+          scrollY: currentAppState.scrollY,
+          zoom: currentAppState.zoom,
         },
       });
-    };
+    },
+    [excalidrawAPI]
+  );
+
+  useEffect(() => {
+    initialElements.forEach((el) => {
+      if (el.customData?.dsaType === "cell" && el.customData.arrayId && el.customData.index === 0) {
+        lastKnownArrayPositionsRef.current.set(el.customData.arrayId as string, { x: el.x, y: el.y });
+      }
+      if (el.customData?.dsaType === "pointer") {
+        const pointerId = (el.customData.pointerId as string) || el.id.replace(/^ptr_/, "");
+        lastKnownPointerPositionsRef.current.set(pointerId, (el.customData.index as number) ?? 0);
+        lastKnownPointerCanvasCoordsRef.current.set(pointerId, { x: el.x, y: el.y });
+      }
+    });
+  }, [initialElements]);
+
+
+
+  useEffect(() => {
+    if (!excalidrawAPI) return;
 
     // Cancel any running animation frame
     if (animFrameRef.current) {
@@ -70,8 +128,11 @@ export const WhiteboardCanvas: React.FC<WhiteboardCanvasProps> = ({
       }
     });
 
-    // If rapid stepping, initial render, or no pointer moved: snap instantly
-    if (isRapidStepping || movingPointers.length === 0) {
+    // If rapid stepping, or teacher mode (unless arrow-button smooth navigation is active),
+    // or no pointer actually moved: snap instantly.
+    // isSmoothingPointer=true lets the arrow buttons play the 300ms cubic-ease animation.
+    const skipAnimation = isRapidStepping || (mode === "teacher" && !isSmoothingPointer) || movingPointers.length === 0;
+    if (skipAnimation) {
       targetPointers.forEach((p) => {
         currentPointers.set(p.id, { x: p.x, y: p.y });
       });
@@ -140,17 +201,325 @@ export const WhiteboardCanvas: React.FC<WhiteboardCanvasProps> = ({
         animFrameRef.current = null;
       }
     };
-  }, [excalidrawAPI, initialElements, isRapidStepping]);
+  }, [excalidrawAPI, initialElements, isRapidStepping, isSmoothingPointer, commitScene]);
+
+  // Handle double clicking a cell in Teacher Mode for in-place editing
+  const handleDoubleClick = () => {
+    if (mode !== "teacher" || !excalidrawAPI || !onCellDoubleClick) return;
+
+    try {
+      const appState = excalidrawAPI.getAppState?.() || {};
+      const sceneElements = (excalidrawAPI.getSceneElements?.() || []) as ExcalidrawCompiledElement[];
+
+      const selectedIds = Object.keys(appState.selectedElementIds || {});
+      const targetElement = sceneElements.find(
+        (el) =>
+          selectedIds.includes(el.id) &&
+          (el.customData?.dsaType === "cell" || el.customData?.dsaType === "valueText")
+      );
+
+      if (targetElement) {
+        const arrayId = targetElement.customData?.arrayId as string;
+        const index = targetElement.customData?.index as number;
+
+        const cellEl =
+          sceneElements.find(
+            (el) =>
+              el.customData?.dsaType === "cell" &&
+              el.customData?.arrayId === arrayId &&
+              el.customData?.index === index
+          ) || targetElement;
+
+        const zoom = appState.zoom?.value || 1;
+        const scrollX = appState.scrollX || 0;
+        const scrollY = appState.scrollY || 0;
+
+        // Position coordinates relative to viewport overlay
+        const screenX = (cellEl.x + scrollX) * zoom;
+        const screenY = (cellEl.y + scrollY) * zoom;
+        const width = cellEl.width * zoom;
+        const height = cellEl.height * zoom;
+
+        const valEl = sceneElements.find(
+          (el) =>
+            el.customData?.dsaType === "valueText" &&
+            el.customData?.arrayId === arrayId &&
+            el.customData?.index === index
+        );
+
+        onCellDoubleClick({
+          arrayId,
+          index,
+          initialValue: valEl?.text ?? "",
+          screenX,
+          screenY,
+          width,
+          height,
+        });
+      }
+    } catch {
+      // ignore
+    }
+  };
+
+  const handlePointerDown = (e: React.PointerEvent) => {
+    pointerDownPosRef.current = { x: e.clientX, y: e.clientY };
+    isDragInteractionRef.current = false;
+  };
+
+  const handlePointerMove = (e: React.PointerEvent) => {
+    if (pointerDownPosRef.current) {
+      const dist = Math.hypot(
+        e.clientX - pointerDownPosRef.current.x,
+        e.clientY - pointerDownPosRef.current.y
+      );
+      if (dist > 4) {
+        isDragInteractionRef.current = true;
+        wasDraggingElementsRef.current = true;
+      }
+    }
+  };
+
+  const handlePointerUp = () => {
+    pointerDownPosRef.current = null;
+    if (isDragInteractionRef.current) {
+      if (dragInteractionTimeoutRef.current) {
+        clearTimeout(dragInteractionTimeoutRef.current);
+      }
+      dragInteractionTimeoutRef.current = setTimeout(() => {
+        isDragInteractionRef.current = false;
+      }, 300);
+    }
+  };
+
+  // Handle pointer dragging and snap cleanly to nearest cell on release
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const handleExcalidrawChange = (elements: readonly any[], appState: any) => {
+    if (!appState) return;
+
+    if (onViewportChange && mode === "teacher") {
+      const nextScrollX = appState.scrollX || 0;
+      const nextScrollY = appState.scrollY || 0;
+      const nextZoom = appState.zoom?.value || 1;
+      const prev = lastViewportRef.current;
+      if (
+        Math.abs(prev.scrollX - nextScrollX) > 0.5 ||
+        Math.abs(prev.scrollY - nextScrollY) > 0.5 ||
+        Math.abs(prev.zoom - nextZoom) > 0.01
+      ) {
+        lastViewportRef.current = {
+          scrollX: nextScrollX,
+          scrollY: nextScrollY,
+          zoom: nextZoom,
+        };
+        onViewportChange({
+          scrollX: nextScrollX,
+          scrollY: nextScrollY,
+          zoom: nextZoom,
+        });
+      }
+    }
+
+    if (mode !== "teacher") return;
+
+    if (appState.selectedElementsAreBeingDragged) {
+      wasDraggingElementsRef.current = true;
+    }
+
+    // Detect dragging state using real Excalidraw AppState flags
+    const isDragging = Boolean(
+      appState.selectedElementsAreBeingDragged ||
+      appState.cursorButton === "down"
+    );
+
+    const movedArrayIds = new Set<string>();
+
+    // Track array movement and sync position to state
+    // Only report array moves when the user actually dragged (wasDraggingElementsRef tells us
+    // this was a user-initiated drag, not a state-driven canvas update from commitScene).
+    if (onArrayMove && !isDragging && wasDraggingElementsRef.current) {
+      const cellsByArray: Record<string, any[]> = {};
+      elements.forEach((el) => {
+        if (el.customData?.dsaType === "cell" && el.customData.arrayId) {
+          const arrId = el.customData.arrayId;
+          if (!cellsByArray[arrId]) cellsByArray[arrId] = [];
+          cellsByArray[arrId].push(el);
+        }
+      });
+
+      Object.entries(cellsByArray).forEach(([arrId, cells]) => {
+        const cell0 = cells.find((c) => c.customData?.index === 0) || cells[0];
+        if (cell0) {
+          const lastPos = lastKnownArrayPositionsRef.current.get(arrId);
+          if (!lastPos) {
+            lastKnownArrayPositionsRef.current.set(arrId, { x: cell0.x, y: cell0.y });
+          } else if (
+            Math.abs(lastPos.x - cell0.x) > 1 ||
+            Math.abs(lastPos.y - cell0.y) > 1
+          ) {
+            movedArrayIds.add(arrId);
+            lastKnownArrayPositionsRef.current.set(arrId, { x: cell0.x, y: cell0.y });
+            onArrayMove(arrId, { x: cell0.x, y: cell0.y });
+          }
+        }
+      });
+    } else if (!isDragging) {
+      // Always keep lastKnownArrayPositions in sync so we can detect real drags later.
+      // Do NOT call onArrayMove — this is just a canvas re-render from state updates.
+      elements.forEach((el) => {
+        if (el.customData?.dsaType === "cell" && el.customData?.index === 0 && el.customData.arrayId) {
+          lastKnownArrayPositionsRef.current.set(el.customData.arrayId as string, { x: el.x, y: el.y });
+        }
+      });
+    }
+
+    // Track pointer movement and snapping on release
+    if (onPointerSnap && !animFrameRef.current && !isDragging) {
+      elements.forEach((el) => {
+        if (el.customData?.dsaType === "pointer") {
+          const pointerId = (el.customData.pointerId as string) || el.id.replace(/^ptr_/, "");
+          const targetArrayId = el.customData.targetArrayId;
+
+          // If the target array itself moved, lock pointer index and skip snapping
+          if (targetArrayId && movedArrayIds.has(targetArrayId)) {
+            const currentIndex = (el.customData?.index as number) ?? 0;
+            lastKnownPointerPositionsRef.current.set(pointerId, currentIndex);
+            return;
+          }
+
+          // Find target array cell elements to determine geometry
+          const arrayCells = elements.filter(
+            (c) => c.customData?.dsaType === "cell" && c.customData?.arrayId === targetArrayId
+          );
+
+          if (arrayCells.length > 0) {
+            const cell0 = arrayCells.find((c) => c.customData?.index === 0) || arrayCells[0];
+            const cellW = cell0.width || 70;
+            const ptrCenterX = el.x + (el.width || 70) / 2;
+
+            const lastCanvasPos = lastKnownPointerCanvasCoordsRef.current.get(pointerId);
+            const isPointerMoved = Boolean(
+              lastCanvasPos &&
+              (Math.abs(lastCanvasPos.x - el.x) > 3 || Math.abs(lastCanvasPos.y - el.y) > 3)
+            );
+
+            // Snap ONLY if:
+            //   1. The pointer actually moved on canvas (user dragged it)
+            //   2. Its target array was NOT being moved simultaneously
+            //   3. The user physically dragged something (wasDraggingElementsRef is set)
+            //
+            // Condition 3 prevents a re-render loop:
+            //   onCellClick → movePointer → commitScene → onChange → isPointerMoved=true
+            //   → onPointerSnap → movePointer → commitScene → … (infinite)
+            // State-driven re-renders (from commitScene) do NOT set wasDraggingElementsRef,
+            // so they fall through to the else branch which just syncs coords.
+            if (isPointerMoved && !movedArrayIds.has(targetArrayId) && wasDraggingElementsRef.current) {
+              const rawIdx = Math.round((ptrCenterX - cell0.x - cellW / 2) / cellW);
+              const maxIdx = arrayCells.length;
+              const snappedIdx = Math.max(-1, Math.min(maxIdx, rawIdx));
+
+              const lastPos = lastKnownPointerPositionsRef.current.get(pointerId);
+              if (lastPos !== undefined && lastPos !== snappedIdx) {
+                lastKnownPointerPositionsRef.current.set(pointerId, snappedIdx);
+                lastKnownPointerCanvasCoordsRef.current.set(pointerId, { x: el.x, y: el.y });
+                onPointerSnap(pointerId, snappedIdx);
+              } else if (lastPos === undefined) {
+                lastKnownPointerPositionsRef.current.set(pointerId, snappedIdx);
+                lastKnownPointerCanvasCoordsRef.current.set(pointerId, { x: el.x, y: el.y });
+              }
+            } else {
+              // Always keep canvas coords in sync (covers state-driven re-renders,
+              // array drags, and the first onChange after a snap fires).
+              lastKnownPointerCanvasCoordsRef.current.set(pointerId, { x: el.x, y: el.y });
+            }
+          }
+        }
+      });
+    }
+
+    const justFinishedDrag = wasDraggingElementsRef.current;
+    if (!isDragging) {
+      wasDraggingElementsRef.current = false;
+    }
+
+    const isDragOrMove =
+      movedArrayIds.size > 0 ||
+      justFinishedDrag ||
+      isDragInteractionRef.current ||
+      Boolean(appState.selectedElementsAreBeingDragged);
+
+    // Support pointer element selection or cell selection
+    if (!isDragging && appState.selectedElementIds) {
+      const selectedIds = Object.keys(appState.selectedElementIds);
+
+      // If a pointer was clicked, activate it — but only if it's a newly selected pointer.
+      // Without this dedup, the following loop occurs:
+      //   onPointerSelect → setState (activePointersByArray) → re-render → commitScene
+      //   → onChange → same pointer still selected → onPointerSelect again → …
+      const selectedPtr = elements.find(
+        (el) =>
+          selectedIds.includes(el.id) &&
+          el.customData?.dsaType === "pointer"
+      );
+      if (selectedPtr && onPointerSelect && !isDragOrMove) {
+        const ptrId = (selectedPtr.customData.pointerId as string) || selectedPtr.id.replace(/^ptr_/, "");
+        if (ptrId !== lastSelectedPtrRef.current) {
+          lastSelectedPtrRef.current = ptrId;
+          onPointerSelect(ptrId);
+        }
+      } else if (!selectedPtr) {
+        // Pointer was deselected — clear so next selection fires correctly.
+        lastSelectedPtrRef.current = null;
+      }
+
+      // If a single cell was clicked (not a group/array selection and not a drag), navigate active pointer to it
+      if (onCellClick) {
+        const selectedCells = elements.filter(
+          (el) =>
+            selectedIds.includes(el.id) &&
+            (el.customData?.dsaType === "cell" ||
+              el.customData?.dsaType === "valueText" ||
+              el.customData?.dsaType === "indexLabel")
+        );
+
+        const uniqueCellIndices = new Set(
+          selectedCells.map((c) => `${c.customData?.arrayId}_${c.customData?.index}`)
+        );
+
+        if (uniqueCellIndices.size === 1 && !isDragOrMove) {
+          const selectedCell = selectedCells[0];
+          const selectedKey = `${selectedCell.customData?.arrayId}_${selectedCell.customData?.index}`;
+
+          if (selectedKey !== lastSelectedCellRef.current) {
+            lastSelectedCellRef.current = selectedKey;
+            onCellClick(
+              selectedCell.customData.arrayId,
+              selectedCell.customData.index
+            );
+          }
+        } else if (uniqueCellIndices.size !== 1) {
+          lastSelectedCellRef.current = null;
+        }
+      }
+    }
+  };
+
+
 
   return (
     <div
       className="whiteboard-wrapper"
       data-testid="whiteboard-wrapper"
       data-mode={mode}
+      onDoubleClick={handleDoubleClick}
+      onPointerDown={handlePointerDown}
+      onPointerMove={handlePointerMove}
+      onPointerUp={handlePointerUp}
     >
       <Excalidraw
         theme="dark"
         excalidrawAPI={handleExcalidrawAPI}
+        onChange={handleExcalidrawChange}
         initialData={{
           // eslint-disable-next-line @typescript-eslint/no-explicit-any
           elements: initialElements as any,
