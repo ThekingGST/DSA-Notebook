@@ -132,25 +132,6 @@ export const App: React.FC = () => {
   } = useTeacherMode();
 
   const [viewport, setViewport] = useState({ scrollX: 0, scrollY: 0, zoom: 1 });
-  // Transient flag: set true only while an arrow-button navigation is playing so
-  // WhiteboardCanvas runs the smooth animation instead of snapping instantly.
-  const [isSmoothingPointer, setIsSmoothingPointer] = useState(false);
-  const smoothingTimeoutRef = React.useRef<ReturnType<typeof setTimeout> | null>(null);
-
-  const smoothNavigatePointer = React.useCallback(
-    (pointerId: string, targetIndex: number) => {
-      // Clear any previous timeout so rapid clicks don't leave the flag stuck on
-      if (smoothingTimeoutRef.current) clearTimeout(smoothingTimeoutRef.current);
-      setIsSmoothingPointer(true);
-      movePointer(pointerId, targetIndex);
-      // 400ms > 300ms animation so the flag resets after the animation finishes
-      smoothingTimeoutRef.current = setTimeout(() => {
-        setIsSmoothingPointer(false);
-        smoothingTimeoutRef.current = null;
-      }, 400);
-    },
-    [movePointer]
-  );
 
   const activeState = mode === "teacher" ? teacherState : studentState;
 
@@ -173,6 +154,73 @@ export const App: React.FC = () => {
     setActiveEdit(null);
   };
 
+  const handleCanvasAction = React.useCallback(
+    (action: import("./components/WhiteboardCanvas").CanvasAction) => {
+      switch (action.type) {
+        case "POINTER_SNAPPED":
+          movePointer(action.pointerId, action.targetIndex);
+          break;
+        case "ARRAY_MOVED":
+          updateArrayPosition(action.arrayId, action.position);
+          break;
+        case "CELL_EDIT_REQUESTED":
+          setActiveEdit(action.edit);
+          break;
+        case "POINTER_SELECTED": {
+          setActivePointerId(action.pointerId);
+          const ptr = teacherRawState.pointers.find((p) => p.id === action.pointerId);
+          if (ptr) {
+            setActivePointerForArray(ptr.targetArrayId, action.pointerId);
+          }
+          break;
+        }
+        case "CELL_CLICKED": {
+          const arrPointers = teacherRawState.pointers.filter(
+            (p) => p.targetArrayId === action.arrayId
+          );
+          const activePtrForArray = activePointersByArray[action.arrayId];
+          const targetPointer =
+            arrPointers.find((p) => p.id === activePtrForArray) ||
+            arrPointers.find((p) => p.id === activePointerId) ||
+            arrPointers[0];
+
+          if (targetPointer) {
+            movePointer(targetPointer.id, action.index);
+            setActivePointerForArray(action.arrayId, targetPointer.id);
+          } else {
+            // If this array doesn't have a pointer yet, attach one directly to this cell
+            const pointerNames = ["i", "j", "k", "left", "right", "mid"];
+            const pointerColors = ["#38bdf8", "#34d399", "#fbbf24", "#f87171", "#a78bfa"];
+            const usedNames = new Set(teacherRawState.pointers.map((p) => p.name));
+            const nextName =
+              pointerNames.find((n) => !usedNames.has(n)) ||
+              `p${teacherRawState.pointers.length + 1}`;
+            const nextColor =
+              pointerColors[teacherRawState.pointers.length % pointerColors.length];
+            addPointer(action.arrayId, nextName, action.index, nextColor);
+          }
+          break;
+        }
+        case "VIEWPORT_CHANGED":
+          if (mode === "teacher") {
+            setViewport(action.viewport);
+          }
+          break;
+      }
+    },
+    [
+      movePointer,
+      updateArrayPosition,
+      setActivePointerId,
+      setActivePointerForArray,
+      teacherRawState.pointers,
+      activePointersByArray,
+      activePointerId,
+      addPointer,
+      mode,
+    ]
+  );
+
   return (
     <ErrorBoundary>
       <div className="app-container">
@@ -182,44 +230,7 @@ export const App: React.FC = () => {
             mode={mode}
             initialElements={compiledElements}
             isRapidStepping={isRapidStepping}
-            isSmoothingPointer={isSmoothingPointer}
-            onCellDoubleClick={setActiveEdit}
-            onPointerSnap={movePointer}
-            onPointerSelect={(ptrId) => {
-              setActivePointerId(ptrId);
-              const ptr = teacherRawState.pointers.find((p) => p.id === ptrId);
-              if (ptr) {
-                setActivePointerForArray(ptr.targetArrayId, ptrId);
-              }
-            }}
-            onArrayMove={updateArrayPosition}
-            onViewportChange={mode === "teacher" ? setViewport : undefined}
-            onCellClick={(arrayId, index) => {
-              const arrPointers = teacherRawState.pointers.filter(
-                (p) => p.targetArrayId === arrayId
-              );
-              const activePtrForArray = activePointersByArray[arrayId];
-              const targetPointer =
-                arrPointers.find((p) => p.id === activePtrForArray) ||
-                arrPointers.find((p) => p.id === activePointerId) ||
-                arrPointers[0];
-
-              if (targetPointer) {
-                movePointer(targetPointer.id, index);
-                setActivePointerForArray(arrayId, targetPointer.id);
-              } else {
-                // If this array doesn't have a pointer yet, attach one directly to this cell
-                const pointerNames = ["i", "j", "k", "left", "right", "mid"];
-                const pointerColors = ["#38bdf8", "#34d399", "#fbbf24", "#f87171", "#a78bfa"];
-                const usedNames = new Set(teacherRawState.pointers.map((p) => p.name));
-                const nextName =
-                  pointerNames.find((n) => !usedNames.has(n)) ||
-                  `p${teacherRawState.pointers.length + 1}`;
-                const nextColor =
-                  pointerColors[teacherRawState.pointers.length % pointerColors.length];
-                addPointer(arrayId, nextName, index, nextColor);
-              }
-            }}
+            onCanvasAction={handleCanvasAction}
           />
 
           {/* Student Mode: Playback Dock */}
@@ -248,7 +259,7 @@ export const App: React.FC = () => {
                 isEditing={activeEdit !== null}
                 onAppendCell={appendCell}
                 onRemoveCell={removeCell}
-                onNavigatePointer={smoothNavigatePointer}
+                onNavigatePointer={movePointer}
               />
               <TeacherToolbox
                 arrays={teacherRawState.arrays}
