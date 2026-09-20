@@ -1,4 +1,5 @@
 import { DSAState } from "../engine/types";
+import { ArrayLayout } from "../layout/arrayLayout";
 
 export interface ExcalidrawCompiledElement {
   id: string;
@@ -131,13 +132,14 @@ export function compileDSAToExcalidraw(
 
   // 1. Compile 1D Arrays
   arrays.forEach((arr) => {
-    const cellW = arr.cellWidth || 70;
-    const cellH = arr.cellHeight || 56;
     const groupId = `group_${arr.id}`;
 
     arr.elements.forEach((val, idx) => {
-      const cellX = arr.position.x + idx * cellW;
-      const cellY = arr.position.y;
+      const cellBounds = ArrayLayout.getCellBounds(arr, idx);
+      const cellX = cellBounds.x;
+      const cellY = cellBounds.y;
+      const cellW = cellBounds.width;
+      const cellH = cellBounds.height;
       const cellId = `cell_${arr.id}_${idx}`;
       const valTextId = `val_${arr.id}_${idx}`;
       const idxTextId = `idx_${arr.id}_${idx}`;
@@ -229,29 +231,22 @@ export function compileDSAToExcalidraw(
     });
   });
 
-  // 2. Compile Pointers with vertical stacking
+  // Index pointers by target array + index to handle overlapping/stacked pointers
   const pointersByTarget: Record<string, typeof pointers> = {};
   pointers.forEach((p) => {
     const key = `${p.targetArrayId}_${p.index}`;
-    if (!pointersByTarget[key]) pointersByTarget[key] = [];
+    if (!pointersByTarget[key]) {
+      pointersByTarget[key] = [];
+    }
     pointersByTarget[key].push(p);
   });
 
+  // 2. Compile Pointers
   pointers.forEach((p) => {
     const targetArr = arrays.find((a) => a.id === p.targetArrayId);
     if (!targetArr) return;
 
-    const cellW = targetArr.cellWidth || 70;
-    let cellCenterX: number;
-
-    if (p.index === -1) {
-      cellCenterX = targetArr.position.x - cellW / 2;
-    } else if (p.index >= targetArr.elements.length) {
-      cellCenterX = targetArr.position.x + targetArr.elements.length * cellW + cellW / 2;
-    } else {
-      cellCenterX = targetArr.position.x + p.index * cellW + cellW / 2;
-    }
-
+    const cellCenterX = ArrayLayout.getPointerTargetCenterX(targetArr, p.index);
     const siblings = pointersByTarget[`${p.targetArrayId}_${p.index}`] || [p];
     const stackRank = siblings.indexOf(p);
 

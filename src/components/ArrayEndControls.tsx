@@ -1,5 +1,6 @@
 import React from "react";
 import { DSAArray, DSAPointer } from "../engine/types";
+import { ArrayLayout } from "../layout/arrayLayout";
 import "./ArrayEndControls.css";
 
 export interface ArrayEndControlsProps {
@@ -34,9 +35,6 @@ export const ArrayEndControls: React.FC<ArrayEndControlsProps> = ({
   return (
     <div className="array-end-controls-layer" aria-hidden="false">
       {arrays.map((arr) => {
-        const cellW = arr.cellWidth || 70;
-        const cellH = arr.cellHeight || 56;
-
         const arrPointers = pointers.filter((p) => p.targetArrayId === arr.id);
         const hasPointers = arrPointers.length > 0;
         const activePtrId =
@@ -45,43 +43,24 @@ export const ArrayEndControls: React.FC<ArrayEndControlsProps> = ({
           arrPointers.find((p) => p.id === activePtrId) || arrPointers[0];
 
         // Arrow nav buttons are visible ONLY when the globally active pointer belongs
-        // to THIS specific array.  Using activePointersByArray as fallback caused every
+        // to THIS specific array. Using activePointersByArray as fallback caused every
         // array with pointers to satisfy the condition simultaneously.
         const activePtrIsForThisArray =
           Boolean(activePointerId) && arrPointers.some((p) => p.id === activePointerId);
         const showNavButtons =
           activePtrIsForThisArray && Boolean(onNavigatePointer) && Boolean(activePtr);
 
-        let screenX: number;
-        let screenY: number;
-        let targetIndex = arr.elements.length - 1;
-
-        if (hasPointers && activePtr) {
-          targetIndex = Math.max(-1, Math.min(arr.elements.length, activePtr.index));
-          let cellCenterX: number;
-          if (targetIndex === -1) {
-            cellCenterX = arr.position.x - cellW / 2;
-          } else if (targetIndex >= arr.elements.length) {
-            cellCenterX = arr.position.x + arr.elements.length * cellW + cellW / 2;
-          } else {
-            cellCenterX = arr.position.x + targetIndex * cellW + cellW / 2;
-          }
-          // Position adjacent to active cell: directly below index label
-          const actionY = arr.position.y + cellH + 34;
-          screenX = (cellCenterX + scrollX) * zoom;
-          screenY = (actionY + scrollY) * zoom;
-        } else {
-          const rawRightX = arr.position.x + arr.elements.length * cellW + 10;
-          const rawCenterY = arr.position.y + (cellH - 32) / 2;
-          screenX = (rawRightX + scrollX) * zoom;
-          screenY = (rawCenterY + scrollY) * zoom;
-        }
-
-        const canRemove = arr.elements.length > 1;
-
         // Hide the entire pill — including + and − — when no pointer for this array
         // is actively selected. All four buttons follow the same selection-based rule.
         if (!activePtrIsForThisArray) return null;
+
+        const { screenX, screenY, targetIndex } = ArrayLayout.getControlsPillScreenAnchor(
+          arr,
+          hasPointers && activePtr ? activePtr.index : null,
+          { scrollX, scrollY, zoom }
+        );
+
+        const canRemove = arr.elements.length > 1;
 
         return (
           <div

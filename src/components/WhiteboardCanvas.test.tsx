@@ -558,5 +558,52 @@ describe("WhiteboardCanvas component", () => {
     // Neither pointer snaps or resets
     expect(handlePointerSnap).not.toHaveBeenCalled();
   });
+
+  it("dispatches typed CanvasActions through the onCanvasAction seam", () => {
+    const handleCanvasAction = vi.fn();
+    const dsaElements = compileDSAToExcalidraw(
+      {
+        arrays: [{ id: "A", name: "nums", elements: [10, 20, 30], position: { x: 100, y: 200 } }],
+        pointers: [{ id: "p1", name: "i", targetArrayId: "A", index: 0 }],
+        variables: [],
+      },
+      { standalonePointers: true }
+    );
+
+    render(
+      <WhiteboardCanvas
+        mode="teacher"
+        initialElements={dsaElements}
+        onCanvasAction={handleCanvasAction}
+      />
+    );
+
+    // Simulate pointer selection
+    mockAppState.selectedElementIds = { ptr_p1: true };
+    mockAppState.selectedElementsAreBeingDragged = false;
+    const canvas = screen.getByTestId("mock-excalidraw-canvas");
+    fireEvent.click(canvas);
+
+    expect(handleCanvasAction).toHaveBeenCalledWith({
+      type: "POINTER_SELECTED",
+      pointerId: "p1",
+    });
+
+    // Simulate array drag
+    const movedCells = dsaElements.map((el) => {
+      if (el.customData?.dsaType === "cell") {
+        return { ...el, x: el.x + 100, y: el.y + 50 };
+      }
+      return el;
+    });
+    mockSceneElements = movedCells;
+    simulateDrag(canvas);
+
+    expect(handleCanvasAction).toHaveBeenCalledWith({
+      type: "ARRAY_MOVED",
+      arrayId: "A",
+      position: { x: 200, y: 250 },
+    });
+  });
 });
 
