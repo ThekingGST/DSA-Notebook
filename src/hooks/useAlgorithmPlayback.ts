@@ -12,31 +12,33 @@ export function useAlgorithmPlayback(
   options: UseAlgorithmPlaybackOptions = {}
 ) {
   const { stepIntervalMs = 1000, initialStep = 0 } = options;
-  const engineRef = useRef<DSAStateEngine>(
-    (() => {
-      const engine = new DSAStateEngine(trace);
-      if (initialStep > 0) {
-        engine.stepTo(initialStep);
-      }
-      return engine;
-    })()
-  );
 
-  // Re-initialize engine if trace reference changes
-  useEffect(() => {
-    setIsPlaying(false);
-    engineRef.current.loadTrace(trace);
+  const [engineState, setEngineState] = useState(() => {
+    const engine = new DSAStateEngine(trace);
     if (initialStep > 0) {
-      engineRef.current.stepTo(initialStep);
+      engine.stepTo(initialStep);
     }
-    setCurrentStep(engineRef.current.getCurrentStepIndex());
-  }, [trace, initialStep]);
+    return { engine, trace };
+  });
 
   const [currentStep, setCurrentStep] = useState(initialStep);
   const [isPlaying, setIsPlaying] = useState(false);
   const [isRapidStepping, setIsRapidStepping] = useState(false);
   const lastStepTimeRef = useRef<number>(0);
   const rapidTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  // Synchronously update engine when trace reference changes
+  if (engineState.trace !== trace) {
+    const newEngine = new DSAStateEngine(trace);
+    if (initialStep > 0) {
+      newEngine.stepTo(initialStep);
+    }
+    setEngineState({ engine: newEngine, trace });
+    setCurrentStep(newEngine.getCurrentStepIndex());
+    setIsPlaying(false);
+  }
+
+  const engine = engineState.engine;
 
   const markSteppingEvent = useCallback(() => {
     const now = Date.now();
@@ -52,58 +54,58 @@ export function useAlgorithmPlayback(
     }
   }, []);
 
-  const totalSteps = useMemo(() => engineRef.current.getTotalSteps(), [trace]);
+  const totalSteps = useMemo(() => engine.getTotalSteps(), [engine]);
 
   const currentSnapshot: ComputedSnapshot = useMemo(() => {
-    return engineRef.current.getCurrentSnapshot();
-  }, [currentStep, trace]);
+    return engine.getCurrentSnapshot();
+  }, [engine, currentStep]);
 
   const currentState: DSAState = currentSnapshot.state;
 
   const stepTo = useCallback((index: number) => {
     markSteppingEvent();
-    engineRef.current.stepTo(index);
-    setCurrentStep(engineRef.current.getCurrentStepIndex());
-  }, [markSteppingEvent]);
+    engine.stepTo(index);
+    setCurrentStep(engine.getCurrentStepIndex());
+  }, [engine, markSteppingEvent]);
 
   const stepForward = useCallback(() => {
     markSteppingEvent();
-    engineRef.current.stepForward();
-    setCurrentStep(engineRef.current.getCurrentStepIndex());
-  }, [markSteppingEvent]);
+    engine.stepForward();
+    setCurrentStep(engine.getCurrentStepIndex());
+  }, [engine, markSteppingEvent]);
 
   const stepBackward = useCallback(() => {
     markSteppingEvent();
-    engineRef.current.stepBackward();
-    setCurrentStep(engineRef.current.getCurrentStepIndex());
-  }, [markSteppingEvent]);
+    engine.stepBackward();
+    setCurrentStep(engine.getCurrentStepIndex());
+  }, [engine, markSteppingEvent]);
 
   const reset = useCallback(() => {
     setIsPlaying(false);
-    engineRef.current.reset();
+    engine.reset();
     setCurrentStep(0);
-  }, []);
+  }, [engine]);
 
   const togglePlay = useCallback(() => {
     setIsPlaying((prev) => {
       // If at end, reset to 0 before starting play
-      if (!prev && engineRef.current.getCurrentStepIndex() >= engineRef.current.getTotalSteps()) {
-        engineRef.current.reset();
+      if (!prev && engine.getCurrentStepIndex() >= engine.getTotalSteps()) {
+        engine.reset();
         setCurrentStep(0);
       }
       return !prev;
     });
-  }, []);
+  }, [engine]);
 
   // Auto-play interval timer
   useEffect(() => {
     if (!isPlaying) return;
 
     const timer = setInterval(() => {
-      if (engineRef.current.canStepForward()) {
-        engineRef.current.stepForward();
-        setCurrentStep(engineRef.current.getCurrentStepIndex());
-        if (!engineRef.current.canStepForward()) {
+      if (engine.canStepForward()) {
+        engine.stepForward();
+        setCurrentStep(engine.getCurrentStepIndex());
+        if (!engine.canStepForward()) {
           setIsPlaying(false);
         }
       } else {
@@ -112,7 +114,7 @@ export function useAlgorithmPlayback(
     }, stepIntervalMs);
 
     return () => clearInterval(timer);
-  }, [isPlaying, stepIntervalMs]);
+  }, [engine, isPlaying, stepIntervalMs]);
 
   // Cleanup timers on unmount
   useEffect(() => {
