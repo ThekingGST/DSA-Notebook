@@ -15,7 +15,7 @@ describe("ApiKeyModal component", () => {
     render(<ApiKeyModal isOpen={true} onClose={onClose} onSaved={onSaved} />);
 
     expect(screen.getByText(/NVIDIA AI Configuration/i)).toBeInTheDocument();
-    expect(screen.getByText("meta/llama-3.3-70b-instruct")).toBeInTheDocument();
+    expect(screen.getByText("meta/llama-3.2-11b-vision-instruct")).toBeInTheDocument();
 
     const input = screen.getByLabelText(/NVIDIA API Key/i);
     fireEvent.change(input, { target: { value: "nvapi-my-secret-key" } });

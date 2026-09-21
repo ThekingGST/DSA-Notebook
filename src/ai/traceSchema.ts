@@ -24,7 +24,7 @@ export const DSAPointerSchema = z.object({
 export const DSAVariableSchema = z.object({
   id: z.string().min(1, "Variable ID is required"),
   name: z.string().min(1, "Variable name is required"),
-  value: z.union([z.number(), z.string()]),
+  value: z.union([z.number(), z.string(), z.boolean(), z.null()]),
   color: z.string().optional(),
 });
 
@@ -85,7 +85,7 @@ export const AlgorithmStepActionSchema = z.discriminatedUnion("type", [
   z.object({
     type: z.literal("set_variable"),
     variableId: z.string().min(1),
-    value: z.union([z.number(), z.string()]),
+    value: z.union([z.number(), z.string(), z.boolean(), z.null()]),
     name: z.string().optional(),
     color: z.string().optional(),
   }),

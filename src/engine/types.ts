@@ -18,7 +18,7 @@ export interface DSAPointer {
 export interface DSAVariable {
   id: string;
   name: string;
-  value: number | string;
+  value: number | string | boolean | null;
   color?: string;
 }
 
@@ -65,7 +65,7 @@ export type AlgorithmStepAction =
   | {
       type: "set_variable";
       variableId: string;
-      value: number | string;
+      value: number | string | boolean | null;
       name?: string;
       color?: string;
     }

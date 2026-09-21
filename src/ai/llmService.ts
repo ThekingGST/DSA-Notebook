@@ -34,7 +34,7 @@ export function getNvidiaModel(): string {
   if (typeof import.meta !== "undefined" && import.meta.env?.VITE_NVIDIA_MODEL) {
     return import.meta.env.VITE_NVIDIA_MODEL.trim();
   }
-  return "meta/llama-3.3-70b-instruct";
+  return "meta/llama-3.2-11b-vision-instruct";
 }
 
 export function cleanJsonOutput(raw: string): string {
@@ -81,10 +81,14 @@ export async function queryLLMTrace(
 
     if (apiKey) {
       // Live NVIDIA NIM API call
+      const isTestEnv =
+        (typeof process !== "undefined" && process.env?.NODE_ENV === "test") ||
+        (typeof import.meta !== "undefined" && import.meta.env?.MODE === "test");
+
       const endpoint =
+        !isTestEnv &&
         typeof window !== "undefined" &&
-        window.location.hostname === "localhost" &&
-        !window.location.port.includes("test")
+        window.location.hostname === "localhost"
           ? "/api/nvidia/chat/completions"
           : "https://integrate.api.nvidia.com/v1/chat/completions";
 
@@ -105,7 +109,7 @@ export async function queryLLMTrace(
               { role: "user", content: userPrompt },
             ],
             temperature: 0.2,
-            max_tokens: 4096,
+            max_tokens: 2500,
           }),
         });
       } catch (networkErr: unknown) {

@@ -152,11 +152,20 @@ describe("Seam 2: AI Step Protocol & LLM Service Integration", () => {
   });
 
   it("manages localStorage API key and default model", () => {
-    expect(getNvidiaApiKey()).toBeUndefined();
-    setNvidiaApiKey("nvapi-my-saved-key");
-    expect(getNvidiaApiKey()).toBe("nvapi-my-saved-key");
-    expect(getNvidiaModel()).toBe("meta/llama-3.3-70b-instruct");
-    setNvidiaApiKey("");
-    expect(getNvidiaApiKey()).toBeUndefined();
+    const origEnvKey = import.meta.env.VITE_NVIDIA_API_KEY;
+    try {
+      // Temporarily clear env key to test pure localStorage isolation
+      delete (import.meta.env as Record<string, unknown>).VITE_NVIDIA_API_KEY;
+      expect(getNvidiaApiKey()).toBeUndefined();
+      setNvidiaApiKey("nvapi-my-saved-key");
+      expect(getNvidiaApiKey()).toBe("nvapi-my-saved-key");
+      expect(getNvidiaModel()).toBe("meta/llama-3.2-11b-vision-instruct");
+      setNvidiaApiKey("");
+      expect(getNvidiaApiKey()).toBeUndefined();
+    } finally {
+      if (origEnvKey !== undefined) {
+        (import.meta.env as Record<string, unknown>).VITE_NVIDIA_API_KEY = origEnvKey;
+      }
+    }
   });
 });
