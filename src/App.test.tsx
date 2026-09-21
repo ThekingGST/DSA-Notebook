@@ -124,4 +124,32 @@ describe("App root component", () => {
     // j's step left should still be not disabled (j is at 1, not 0)
     expect(stepLeftJ).not.toBeDisabled();
   });
+
+  it("renders PromptBar in Student Mode and loads trace when preset chip is clicked", async () => {
+    render(<App />);
+
+    expect(screen.getByText("Binary Search")).toBeInTheDocument();
+    expect(screen.getByText("Two Pointers")).toBeInTheDocument();
+    expect(screen.getByText("Linear Scan")).toBeInTheDocument();
+    expect(screen.getByText("Second Largest")).toBeInTheDocument();
+
+    // Click Binary Search preset chip
+    fireEvent.click(screen.getByText("Binary Search"));
+
+    // Verify Binary Search trace is loaded atomically (Step 0 / 4)
+    expect(
+      await screen.findByText((_, element) => element?.textContent?.trim() === "Step 0 / 4")
+    ).toBeInTheDocument();
+  });
+
+  it("hides PromptBar when switched to Teacher Mode", () => {
+    render(<App />);
+
+    expect(screen.getByText("Binary Search")).toBeInTheDocument();
+
+    const teacherBtn = screen.getByRole("button", { name: /teacher mode/i });
+    fireEvent.click(teacherBtn);
+
+    expect(screen.queryByText("Binary Search")).not.toBeInTheDocument();
+  });
 });

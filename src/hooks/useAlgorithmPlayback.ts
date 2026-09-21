@@ -24,11 +24,12 @@ export function useAlgorithmPlayback(
 
   // Re-initialize engine if trace reference changes
   useEffect(() => {
+    setIsPlaying(false);
     engineRef.current.loadTrace(trace);
     if (initialStep > 0) {
       engineRef.current.stepTo(initialStep);
-      setCurrentStep(engineRef.current.getCurrentStepIndex());
     }
+    setCurrentStep(engineRef.current.getCurrentStepIndex());
   }, [trace, initialStep]);
 
   const [currentStep, setCurrentStep] = useState(initialStep);

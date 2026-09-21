@@ -1,7 +1,8 @@
-import React, { useState, useMemo } from "react";
+import React, { useState, useMemo, useCallback } from "react";
 import { Header, WorkspaceMode } from "./components/Header";
 import { WhiteboardCanvas } from "./components/WhiteboardCanvas";
 import { PlaybackDock } from "./components/PlaybackDock";
+import { PromptBar } from "./components/PromptBar";
 import { TeacherToolbox } from "./components/TeacherToolbox";
 import { ArrayEndControls } from "./components/ArrayEndControls";
 import { CellInlineEditor, ActiveCellEdit } from "./components/CellInlineEditor";
@@ -10,6 +11,7 @@ import { useTeacherMode } from "./hooks/useTeacherMode";
 import { compileDSAToExcalidraw } from "./compiler/compileDSAToExcalidraw";
 import { ExecutionTrace } from "./engine/types";
 import { ErrorBoundary } from "./components/ErrorBoundary";
+import { queryLLMTrace } from "./ai/llmService";
 import "./App.css";
 
 const canonicalTrace: ExecutionTrace = {
@@ -101,6 +103,11 @@ export const App: React.FC = () => {
     return isNaN(s) ? 0 : s;
   }, []);
 
+  const [activeTrace, setActiveTrace] = useState<ExecutionTrace>(canonicalTrace);
+  const [isAiLoading, setIsAiLoading] = useState(false);
+  const [aiError, setAiError] = useState<string | null>(null);
+  const [lastPrompt, setLastPrompt] = useState<string>("");
+
   // Student mode playback
   const {
     currentStep,
@@ -111,7 +118,31 @@ export const App: React.FC = () => {
     stepTo,
     togglePlay,
     reset: resetPlayback,
-  } = useAlgorithmPlayback(canonicalTrace, { initialStep });
+  } = useAlgorithmPlayback(activeTrace, { initialStep });
+
+  const handlePromptSubmit = useCallback(async (query: string) => {
+    setIsAiLoading(true);
+    setAiError(null);
+    setLastPrompt(query);
+    try {
+      const trace = await queryLLMTrace(query);
+      setActiveTrace(trace);
+    } catch (err: unknown) {
+      const message =
+        err instanceof Error
+          ? err.message
+          : "Failed to generate algorithm trace. Please retry.";
+      setAiError(message);
+    } finally {
+      setIsAiLoading(false);
+    }
+  }, []);
+
+  const handlePromptRetry = useCallback(() => {
+    if (lastPrompt) {
+      handlePromptSubmit(lastPrompt);
+    }
+  }, [handlePromptSubmit, lastPrompt]);
 
   // Teacher mode authoring
   const {
@@ -233,16 +264,24 @@ export const App: React.FC = () => {
             onCanvasAction={handleCanvasAction}
           />
 
-          {/* Student Mode: Playback Dock */}
+          {/* Student Mode: Playback Dock & Prompt Bar */}
           {mode === "student" && (
-            <PlaybackDock
-              currentStep={currentStep}
-              totalSteps={totalSteps}
-              isPlaying={isPlaying}
-              onStepChange={stepTo}
-              onTogglePlay={togglePlay}
-              onReset={resetPlayback}
-            />
+            <>
+              <PlaybackDock
+                currentStep={currentStep}
+                totalSteps={totalSteps}
+                isPlaying={isPlaying}
+                onStepChange={stepTo}
+                onTogglePlay={togglePlay}
+                onReset={resetPlayback}
+              />
+              <PromptBar
+                onSubmit={handlePromptSubmit}
+                isLoading={isAiLoading}
+                errorMessage={aiError}
+                onRetry={handlePromptRetry}
+              />
+            </>
           )}
 
           {/* Teacher Mode: Authoring Tools */}
