@@ -121,7 +121,7 @@ export async function queryLLMTrace(
 
       let res: Response;
       const controller = new AbortController();
-      const timeoutMs = 45000;
+      const timeoutMs = 120000;
       const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
 
       try {
@@ -148,7 +148,7 @@ export async function queryLLMTrace(
           (networkErr instanceof Error && networkErr.name === "AbortError")
         ) {
           throw new Error(
-            `Request timed out after 45s. The model (${model}) server took too long to respond. Please retry or switch to meta/llama-3.2-11b-vision-instruct for faster generation.`
+            `Request timed out after 2 minutes. The NVIDIA API server is experiencing high latency. Please retry your request.`
           );
         }
         throw new Error(

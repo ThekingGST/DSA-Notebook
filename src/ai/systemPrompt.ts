@@ -66,5 +66,5 @@ SUPPORTED ACTIONS:
 INVARIANTS TO ENFORCE:
 - Every pointer's targetArrayId must exist.
 - All pointer movements must be within [-1, array.elements.length].
-- All swaps and cell writes must be strictly within [0, array.elements.length - 1].
-- Provide clear, didactic, student-friendly titles and explanations at each step.`;
+- Provide clear, didactic, student-friendly titles and explanations at each step.
+- Keep the execution trace concise and focused (typically 4 to 8 essential steps). Focus on key comparisons, pointer advances, and state transitions without excessive wordiness.`;
