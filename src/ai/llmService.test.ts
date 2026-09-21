@@ -159,7 +159,7 @@ describe("Seam 2: AI Step Protocol & LLM Service Integration", () => {
       expect(getNvidiaApiKey()).toBeUndefined();
       setNvidiaApiKey("nvapi-my-saved-key");
       expect(getNvidiaApiKey()).toBe("nvapi-my-saved-key");
-      expect(getNvidiaModel()).toBe("meta/llama-3.2-11b-vision-instruct");
+      expect(getNvidiaModel()).toBe("nvidia/nemotron-3.5-lightning-30b-a3b");
       setNvidiaApiKey("");
       expect(getNvidiaApiKey()).toBeUndefined();
     } finally {

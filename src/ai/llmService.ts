@@ -34,14 +34,25 @@ export function getNvidiaModel(): string {
   if (typeof import.meta !== "undefined" && import.meta.env?.VITE_NVIDIA_MODEL) {
     return import.meta.env.VITE_NVIDIA_MODEL.trim();
   }
-  return "meta/llama-3.2-11b-vision-instruct";
+  return "nvidia/nemotron-3.5-lightning-30b-a3b";
 }
 
 export function cleanJsonOutput(raw: string): string {
-  const trimmed = raw.trim();
-  const fenceMatch = trimmed.match(/```(?:json)?\s*([\s\S]*?)\s*```/);
-  if (fenceMatch) {
-    return fenceMatch[1].trim();
+  let trimmed = raw.trim();
+
+  // Strip <think>...</think> blocks if present from reasoning models
+  trimmed = trimmed.replace(/<think>[\s\S]*?<\/think>/gi, "").trim();
+
+  // Handle markdown code-fenced JSON responses (prefer valid JSON blocks if reasoning text has fences)
+  const fenceMatches = Array.from(trimmed.matchAll(/```(?:json)?\s*([\s\S]*?)\s*```/g));
+  if (fenceMatches.length > 0) {
+    for (let i = fenceMatches.length - 1; i >= 0; i--) {
+      const candidate = fenceMatches[i][1].trim();
+      if (candidate.startsWith("{") && candidate.endsWith("}")) {
+        return candidate;
+      }
+    }
+    return fenceMatches[fenceMatches.length - 1][1].trim();
   }
 
   // Handle cases where model adds introductory prose before or after raw JSON
@@ -109,7 +120,7 @@ export async function queryLLMTrace(
               { role: "user", content: userPrompt },
             ],
             temperature: 0.2,
-            max_tokens: 2500,
+            max_tokens: model.includes("nemotron") ? 6144 : 2500,
           }),
         });
       } catch (networkErr: unknown) {
