@@ -136,6 +136,26 @@ export function computeSnapshots(trace: ExecutionTrace): ComputedSnapshot[] {
   let currentState = { ...trace.initialState };
 
   trace.steps.forEach((step) => {
+    // A comparison is transient to the step where it occurs.
+    // If the step has no compare action, reset activeComparison so it does not bleed into subsequent steps.
+    const hasCompareAction = step.actions.some((a) => a.type === "compare");
+    if (!hasCompareAction) {
+      currentState = { ...currentState, activeComparison: null };
+    }
+
+    // If this step performs a comparison without explicit highlights,
+    // clear previous step custom highlights so old highlights do not accumulate.
+    const hasHighlightAction = step.actions.some(
+      (a) =>
+        a.type === "highlight" ||
+        a.type === "swap" ||
+        a.type === "write_cell" ||
+        a.type === "clear_highlights"
+    );
+    if (hasCompareAction && !hasHighlightAction) {
+      currentState = { ...currentState, highlights: [] };
+    }
+
     for (const action of step.actions) {
       currentState = dsaReducer(currentState, action);
     }

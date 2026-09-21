@@ -126,4 +126,29 @@ describe("compileDSAToExcalidraw", () => {
     const cell2 = el2.find((e) => e.id === "cell_A_0");
     expect(cell1?.seed).toBe(cell2?.seed);
   });
+
+  it("prioritizes custom highlights (e.g. green for match, red for mismatch) over comparison amber", () => {
+    const stateWithCompareAndHighlight: DSAState = {
+      ...sampleState,
+      activeComparison: {
+        arrayId: "A",
+        indexA: 0,
+        indexB: 1,
+        operator: "==",
+        result: true,
+      },
+      highlights: [{ arrayId: "A", index: 0, color: "#22c55e" }],
+    };
+
+    const elements = compileDSAToExcalidraw(stateWithCompareAndHighlight);
+    const cell0 = elements.find((e) => e.id === "cell_A_0");
+    const cell1 = elements.find((e) => e.id === "cell_A_1");
+
+    // Cell 0 should receive the green custom highlight (#22c55e), NOT amber (#d97706)
+    expect(cell0?.strokeColor).toBe("#22c55e");
+
+    // Cell 1 was not part of explicit highlights, so it should NOT receive an amber highlight
+    expect(cell1?.strokeColor).toBe("#1e1e1e");
+  });
 });
+

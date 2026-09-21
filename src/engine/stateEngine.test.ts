@@ -229,4 +229,15 @@ describe("computeSnapshots & DSAStateEngine", () => {
     engine.stepTo(2);
     expect(engine.getCurrentStepIndex()).toBe(2);
   });
+
+  it("resets activeComparison across steps when next step does not perform a comparison", () => {
+    const snapshots = computeSnapshots(trace);
+    // Step 1 performed a comparison
+    expect(snapshots[1].state.activeComparison).toBeDefined();
+    expect(snapshots[1].state.activeComparison?.indexA).toBe(0);
+
+    // Step 2 only updated a variable, so activeComparison should be reset to null
+    expect(snapshots[2].state.activeComparison).toBeNull();
+  });
 });
+

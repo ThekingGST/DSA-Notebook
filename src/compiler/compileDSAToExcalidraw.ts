@@ -144,26 +144,31 @@ export function compileDSAToExcalidraw(
       const valTextId = `val_${arr.id}_${idx}`;
       const idxTextId = `idx_${arr.id}_${idx}`;
 
-      const isComparing =
-        activeComparison &&
-        (activeComparison.arrayId ? activeComparison.arrayId === arr.id : true) &&
-        (activeComparison.indexA === idx || activeComparison.indexB === idx);
-
       const customHighlight = highlights.find(
         (h) => h.arrayId === arr.id && h.index === idx
       );
+
+      // Active comparison amber is used when no explicit highlights are active on the step,
+      // or to mark the comparing cell if no custom color was assigned.
+      // Explicit custom highlights (e.g. green for match, red for mismatch) take precedence.
+      const isComparing =
+        (highlights.length === 0 || !!customHighlight) &&
+        activeComparison &&
+        (activeComparison.arrayId ? activeComparison.arrayId === arr.id : true) &&
+        (activeComparison.indexA === idx ||
+          (activeComparison.indexB !== undefined && activeComparison.indexB === idx));
 
       let strokeColor = "#1e1e1e";
       let backgroundColor = "rgba(255, 255, 255, 0.05)";
       let strokeWidth = 2;
 
-      if (isComparing) {
-        strokeColor = "#d97706"; // amber
-        backgroundColor = "rgba(241, 176, 0, 0.2)";
-        strokeWidth = 2.5;
-      } else if (customHighlight) {
+      if (customHighlight) {
         strokeColor = customHighlight.color;
         backgroundColor = `${customHighlight.color}26`;
+        strokeWidth = 2.5;
+      } else if (isComparing) {
+        strokeColor = "#d97706"; // amber
+        backgroundColor = "rgba(241, 176, 0, 0.2)";
         strokeWidth = 2.5;
       }
 
