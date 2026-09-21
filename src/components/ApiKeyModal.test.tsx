@@ -15,7 +15,7 @@ describe("ApiKeyModal component", () => {
     render(<ApiKeyModal isOpen={true} onClose={onClose} onSaved={onSaved} />);
 
     expect(screen.getByText(/NVIDIA AI Configuration/i)).toBeInTheDocument();
-    expect(screen.getByText("nvidia/nemotron-3.5-lightning-30b-a3b")).toBeInTheDocument();
+    expect(screen.getByLabelText(/Active Model/i)).toBeInTheDocument();
 
     const input = screen.getByLabelText(/NVIDIA API Key/i);
     fireEvent.change(input, { target: { value: "nvapi-my-secret-key" } });

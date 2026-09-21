@@ -1,5 +1,10 @@
 import React, { useState, useEffect } from "react";
-import { getNvidiaApiKey, setNvidiaApiKey, getNvidiaModel } from "../ai/llmService";
+import {
+  getNvidiaApiKey,
+  setNvidiaApiKey,
+  getNvidiaModel,
+  setNvidiaModel,
+} from "../ai/llmService";
 import "./ApiKeyModal.css";
 
 interface ApiKeyModalProps {
@@ -14,11 +19,12 @@ export const ApiKeyModal: React.FC<ApiKeyModalProps> = ({
   onSaved,
 }) => {
   const [apiKey, setApiKey] = useState("");
-  const model = getNvidiaModel();
+  const [selectedModel, setSelectedModel] = useState("meta/llama-3.2-11b-vision-instruct");
 
   useEffect(() => {
     if (isOpen) {
       setApiKey(getNvidiaApiKey() || "");
+      setSelectedModel(getNvidiaModel());
     }
   }, [isOpen]);
 
@@ -27,6 +33,7 @@ export const ApiKeyModal: React.FC<ApiKeyModalProps> = ({
   const handleSave = (e: React.FormEvent) => {
     e.preventDefault();
     setNvidiaApiKey(apiKey);
+    setNvidiaModel(selectedModel);
     onSaved();
     onClose();
   };
@@ -87,8 +94,23 @@ export const ApiKeyModal: React.FC<ApiKeyModalProps> = ({
           </div>
 
           <div className="api-modal-field">
-            <span className="api-modal-label">Active Model</span>
-            <span className="api-modal-badge">{model}</span>
+            <label htmlFor="nvidia-model-select" className="api-modal-label">
+              Active Model
+            </label>
+            <select
+              id="nvidia-model-select"
+              className="api-modal-input"
+              value={selectedModel}
+              onChange={(e) => setSelectedModel(e.target.value)}
+              style={{ cursor: "pointer", background: "rgba(30, 41, 59, 0.8)", color: "#fff" }}
+            >
+              <option value="meta/llama-3.2-11b-vision-instruct">
+                meta/llama-3.2-11b-vision-instruct (⚡ Fast, Recommended)
+              </option>
+              <option value="nvidia/nemotron-3.5-lightning-30b-a3b">
+                nvidia/nemotron-3.5-lightning-30b-a3b (🧠 Deep Reasoning)
+              </option>
+            </select>
           </div>
 
           <div className="api-modal-actions">

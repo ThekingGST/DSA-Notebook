@@ -31,10 +31,24 @@ export function setNvidiaApiKey(key: string): void {
 }
 
 export function getNvidiaModel(): string {
+  if (typeof window !== "undefined") {
+    const local = localStorage.getItem("dsa_nvidia_model");
+    if (local && local.trim()) return local.trim();
+  }
   if (typeof import.meta !== "undefined" && import.meta.env?.VITE_NVIDIA_MODEL) {
     return import.meta.env.VITE_NVIDIA_MODEL.trim();
   }
-  return "nvidia/nemotron-3.5-lightning-30b-a3b";
+  return "meta/llama-3.2-11b-vision-instruct";
+}
+
+export function setNvidiaModel(model: string): void {
+  if (typeof window !== "undefined") {
+    if (!model.trim()) {
+      localStorage.removeItem("dsa_nvidia_model");
+    } else {
+      localStorage.setItem("dsa_nvidia_model", model.trim());
+    }
+  }
 }
 
 export function cleanJsonOutput(raw: string): string {
@@ -106,6 +120,10 @@ export async function queryLLMTrace(
       const model = options.model || getNvidiaModel();
 
       let res: Response;
+      const controller = new AbortController();
+      const timeoutMs = 45000;
+      const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
+
       try {
         res = await fetch(endpoint, {
           method: "POST",
@@ -122,11 +140,22 @@ export async function queryLLMTrace(
             temperature: 0.2,
             max_tokens: model.includes("nemotron") ? 6144 : 2500,
           }),
+          signal: controller.signal,
         });
       } catch (networkErr: unknown) {
+        if (
+          (networkErr instanceof DOMException && networkErr.name === "AbortError") ||
+          (networkErr instanceof Error && networkErr.name === "AbortError")
+        ) {
+          throw new Error(
+            `Request timed out after 45s. The model (${model}) server took too long to respond. Please retry or switch to meta/llama-3.2-11b-vision-instruct for faster generation.`
+          );
+        }
         throw new Error(
           `Network connection failed when connecting to NVIDIA API. Please check your internet connection.`
         );
+      } finally {
+        clearTimeout(timeoutId);
       }
 
       if (!res.ok) {
