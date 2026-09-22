@@ -279,22 +279,44 @@ export const PromptStudioModal: React.FC<PromptStudioModalProps> = ({
                 className="studio-chip-btn"
                 onClick={() =>
                   setAlgorithmQuery(
-                    "Two Sum on sorted array [2, 7, 11, 15], target = 9 using two pointers"
+                    "Merge two sorted arrays nums1 = [1, 3, 5] and nums2 = [2, 4, 6] into a merged array using three pointers i, j, k"
                   )
                 }
               >
-                Two Sum (Two Pointers)
+                Merge Two Sorted Arrays
               </button>
               <button
                 type="button"
                 className="studio-chip-btn"
                 onClick={() =>
                   setAlgorithmQuery(
-                    "Find maximum element in array [14, 32, 9, 45, 21] using linear scan"
+                    "Sort an array of 0s, 1s, and 2s arr = [2, 0, 2, 1, 1, 0] in-place using Dutch National Flag three-pointer algorithm (low, mid, high)"
                   )
                 }
               >
-                Linear Scan Max
+                Dutch National Flag
+              </button>
+              <button
+                type="button"
+                className="studio-chip-btn"
+                onClick={() =>
+                  setAlgorithmQuery(
+                    "Find maximum subarray sum in arr = [-2, 1, -3, 4, -1, 2, 1, -5, 4] using Kadane's algorithm, tracking currentSum and maxSum"
+                  )
+                }
+              >
+                Kadane's Algorithm
+              </button>
+              <button
+                type="button"
+                className="studio-chip-btn"
+                onClick={() =>
+                  setAlgorithmQuery(
+                    "Two Sum on sorted array [2, 7, 11, 15], target = 9 using two pointers"
+                  )
+                }
+              >
+                Two Sum (Two Pointers)
               </button>
             </div>
 

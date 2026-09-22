@@ -87,4 +87,20 @@ describe("PromptStudioModal", () => {
     );
     expect(onClose).toHaveBeenCalledTimes(1);
   });
+
+  it("renders quick fill chips for diverse archetypes and updates prompt query", () => {
+    render(<PromptStudioModal {...defaultProps} />);
+
+    const mergeChip = screen.getByRole("button", { name: /Merge Two Sorted Arrays/i });
+    const dnfChip = screen.getByRole("button", { name: /Dutch National Flag/i });
+    const kadaneChip = screen.getByRole("button", { name: /Kadane's Algorithm/i });
+
+    expect(mergeChip).toBeInTheDocument();
+    expect(dnfChip).toBeInTheDocument();
+    expect(kadaneChip).toBeInTheDocument();
+
+    fireEvent.click(mergeChip);
+    const input = screen.getByLabelText(/Algorithm Question \/ Problem:/i) as HTMLInputElement;
+    expect(input.value).toContain("Merge two sorted arrays");
+  });
 });
