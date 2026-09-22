@@ -1,4 +1,4 @@
-import { ExecutionTrace } from "../engine/types";
+import { ExecutionTrace, AlgorithmCode } from "../engine/types";
 import { ALGORITHM_PRESETS } from "./presets";
 import { validateExecutionTrace, autoHealExecutionTrace } from "./traceSchema";
 import { buildAlgorithmPrompt } from "./promptBuilder";
@@ -50,6 +50,59 @@ export async function queryAntigravityTrace(query: string): Promise<ExecutionTra
     throw new Error(data.error || "Antigravity CLI did not return a valid execution trace.");
   }
   return data.trace;
+}
+
+export async function translateAlgorithmCode(
+  code: string,
+  toLanguage: string,
+  fromLanguage = "python"
+): Promise<string> {
+  const res = await fetch("/api/antigravity/translate", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ code, toLanguage, fromLanguage }),
+  });
+
+  if (!res.ok) {
+    let errMessage = "";
+    try {
+      const errJson = await res.json();
+      errMessage = errJson.error || JSON.stringify(errJson);
+    } catch {
+      errMessage = await res.text();
+    }
+    throw new Error(errMessage || `Translation failed with status ${res.status}`);
+  }
+
+  const data = await res.json();
+  return data.translatedCode;
+}
+
+export async function generateCodeForTrace(
+  trace: ExecutionTrace
+): Promise<{ code: AlgorithmCode; stepLineMap: number[] }> {
+  const res = await fetch("/api/antigravity/generate-code", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ trace }),
+  });
+
+  if (!res.ok) {
+    let errMessage = "";
+    try {
+      const errJson = await res.json();
+      errMessage = errJson.error || JSON.stringify(errJson);
+    } catch {
+      errMessage = await res.text();
+    }
+    throw new Error(errMessage || `Code generation failed with status ${res.status}`);
+  }
+
+  const data = await res.json();
+  return {
+    code: data.code,
+    stepLineMap: data.stepLineMap || [],
+  };
 }
 
 export function getNvidiaApiKey(): string | undefined {

@@ -162,3 +162,162 @@ export async function handleAntigravityGenerate(
     );
   }
 }
+
+export async function handleAntigravityTranslate(
+  req: IncomingMessage,
+  res: ServerResponse
+): Promise<void> {
+  if (req.method !== "POST") {
+    res.statusCode = 405;
+    res.setHeader("Content-Type", "application/json");
+    res.end(JSON.stringify({ error: "Method Not Allowed. Use POST." }));
+    return;
+  }
+
+  let bodyStr = "";
+  for await (const chunk of req) {
+    bodyStr += chunk;
+  }
+
+  let code = "";
+  let fromLanguage = "python";
+  let toLanguage = "";
+  try {
+    const parsed = JSON.parse(bodyStr || "{}");
+    code = (parsed.code || "").trim();
+    fromLanguage = (parsed.fromLanguage || "python").trim();
+    toLanguage = (parsed.toLanguage || "").trim();
+  } catch {
+    res.statusCode = 400;
+    res.setHeader("Content-Type", "application/json");
+    res.end(JSON.stringify({ error: "Invalid JSON request body." }));
+    return;
+  }
+
+  if (!code || !toLanguage) {
+    res.statusCode = 400;
+    res.setHeader("Content-Type", "application/json");
+    res.end(JSON.stringify({ error: "Missing 'code' or 'toLanguage' parameter." }));
+    return;
+  }
+
+  if (toLanguage.toLowerCase() === fromLanguage.toLowerCase()) {
+    res.statusCode = 200;
+    res.setHeader("Content-Type", "application/json");
+    res.end(JSON.stringify({ success: true, translatedCode: code, language: toLanguage }));
+    return;
+  }
+
+  try {
+    const prompt = `Translate the following ${fromLanguage} code into clean, idiomatic ${toLanguage}.
+CRITICAL REQUIREMENTS:
+1. Maintain the exact same logic, function structure, and line count as much as possible so that line numbers remain aligned.
+2. Output ONLY the translated code enclosed within a markdown code block (\`\`\`${toLanguage.toLowerCase()} ... \`\`\`).
+3. Do NOT output any markdown explanations, commentary, or text outside the code block.
+
+Source Code to Translate:
+${code}`;
+
+    const rawOutput = await agyExecutor.execute(prompt);
+
+    // Extract inside code fence or clean output
+    let translatedCode = rawOutput.trim();
+    const fenceMatch = rawOutput.match(/```(?:[a-zA-Z0-9_-]+)?\s*([\s\S]*?)```/);
+    if (fenceMatch && fenceMatch[1]) {
+      translatedCode = fenceMatch[1].trim();
+    }
+
+    res.statusCode = 200;
+    res.setHeader("Content-Type", "application/json");
+    res.end(JSON.stringify({ success: true, translatedCode, language: toLanguage }));
+  } catch (err: unknown) {
+    res.statusCode = 500;
+    res.setHeader("Content-Type", "application/json");
+    res.end(
+      JSON.stringify({
+        error: err instanceof Error ? err.message : "Translation failed",
+      })
+    );
+  }
+}
+
+export async function handleAntigravityGenerateCode(
+  req: IncomingMessage,
+  res: ServerResponse
+): Promise<void> {
+  if (req.method !== "POST") {
+    res.statusCode = 405;
+    res.setHeader("Content-Type", "application/json");
+    res.end(JSON.stringify({ error: "Method Not Allowed. Use POST." }));
+    return;
+  }
+
+  let bodyStr = "";
+  for await (const chunk of req) {
+    bodyStr += chunk;
+  }
+
+  let trace: any = null;
+  try {
+    const parsed = JSON.parse(bodyStr || "{}");
+    trace = parsed.trace;
+  } catch {
+    res.statusCode = 400;
+    res.setHeader("Content-Type", "application/json");
+    res.end(JSON.stringify({ error: "Invalid JSON request body." }));
+    return;
+  }
+
+  if (!trace || !Array.isArray(trace.steps)) {
+    res.statusCode = 400;
+    res.setHeader("Content-Type", "application/json");
+    res.end(JSON.stringify({ error: "Missing or invalid 'trace' in request body." }));
+    return;
+  }
+
+  try {
+    const title = trace.initialState?.narration?.title || "Algorithm";
+    const stepSummaries = trace.steps
+      .map((s: any, idx: number) => `Step ${idx + 1}: ${s.title} - ${s.explanation}`)
+      .join("\n");
+
+    const prompt = `Write canonical, concise Python source code for the following algorithm and map each step to its 1-indexed executing line number.
+
+Algorithm: ${title}
+Step sequence:
+${stepSummaries}
+
+OUTPUT FORMAT:
+Output a single valid JSON object enclosed in \`\`\`json ... \`\`\` with this exact shape:
+{
+  "code": {
+    "language": "python",
+    "content": "<complete formatted python code>"
+  },
+  "stepLineMap": [<line number for step 1>, <line number for step 2>, ...]
+}
+No extra text or explanations.`;
+
+    const rawOutput = await agyExecutor.execute(prompt);
+    const cleaned = cleanJsonOutput(rawOutput);
+    const parsed = JSON.parse(cleaned);
+
+    res.statusCode = 200;
+    res.setHeader("Content-Type", "application/json");
+    res.end(
+      JSON.stringify({
+        success: true,
+        code: parsed.code || { language: "python", content: "# Python implementation" },
+        stepLineMap: Array.isArray(parsed.stepLineMap) ? parsed.stepLineMap : [],
+      })
+    );
+  } catch (err: unknown) {
+    res.statusCode = 500;
+    res.setHeader("Content-Type", "application/json");
+    res.end(
+      JSON.stringify({
+        error: err instanceof Error ? err.message : "Code generation failed",
+      })
+    );
+  }
+}

@@ -72,16 +72,29 @@ export type AlgorithmStepAction =
   | { type: "highlight"; targets: DSAHighlight[] }
   | { type: "clear_highlights" };
 
+export interface AlgorithmCode {
+  language: string;
+  content: string;
+}
+
+export interface StepCodeContext {
+  line: number;
+  highlightLines?: number[];
+  explanation?: string;
+}
+
 export interface AlgorithmStep {
   stepIndex: number;
   title: string;
   explanation: string;
   actions: AlgorithmStepAction[];
+  codeContext?: StepCodeContext;
 }
 
 export interface ExecutionTrace {
   initialState: DSAState;
   steps: AlgorithmStep[];
+  code?: AlgorithmCode;
 }
 
 export interface ComputedSnapshot {
@@ -89,4 +102,6 @@ export interface ComputedSnapshot {
   title: string;
   explanation: string;
   state: DSAState;
+  codeContext?: StepCodeContext;
 }
+

@@ -98,11 +98,23 @@ export const AlgorithmStepActionSchema = z.discriminatedUnion("type", [
   }),
 ]);
 
+export const AlgorithmCodeSchema = z.object({
+  language: z.string().min(1),
+  content: z.string().min(1),
+});
+
+export const StepCodeContextSchema = z.object({
+  line: z.number().int().positive(),
+  highlightLines: z.array(z.number().int().positive()).optional(),
+  explanation: z.string().optional(),
+});
+
 export const AlgorithmStepSchema = z.object({
   stepIndex: z.number().int().nonnegative(),
   title: z.string().min(1),
   explanation: z.string(),
   actions: z.array(AlgorithmStepActionSchema),
+  codeContext: StepCodeContextSchema.optional(),
 });
 
 export const ExecutionTraceSchema = z
@@ -111,6 +123,7 @@ export const ExecutionTraceSchema = z
     steps: z
       .array(AlgorithmStepSchema)
       .min(2, "Algorithm execution trace must contain at least 2 steps showing state progression"),
+    code: AlgorithmCodeSchema.optional(),
   })
   .superRefine((trace, ctx) => {
     const arrayLengths = new Map<string, number>();
@@ -235,6 +248,13 @@ export function autoHealExecutionTrace(payload: unknown): unknown {
   if (!payload || typeof payload !== "object") return payload;
   const rawTrace = payload as any;
 
+  // Auto-heal raw string code object if model returns code as string
+  if (typeof rawTrace.code === "string") {
+    rawTrace.code = { language: "python", content: rawTrace.code };
+  } else if (rawTrace.code && typeof rawTrace.code === "object" && !rawTrace.code.language) {
+    rawTrace.code.language = "python";
+  }
+
   if (Array.isArray(rawTrace.initialState?.arrays)) {
     const arrayLengths = new Map<string, number>();
     for (const arr of rawTrace.initialState.arrays) {
@@ -248,6 +268,8 @@ export function autoHealExecutionTrace(payload: unknown): unknown {
       for (const ptr of rawTrace.initialState.pointers) {
         if (ptr && ptr.id && ptr.targetArrayId) {
           pointerTargetMap.set(ptr.id, ptr.targetArrayId);
+        }
+        if (ptr && ptr.targetArrayId) {
           const len = arrayLengths.get(ptr.targetArrayId);
           if (len !== undefined && typeof ptr.index === "number") {
             ptr.index = Math.max(-1, Math.min(len, ptr.index));
@@ -258,6 +280,14 @@ export function autoHealExecutionTrace(payload: unknown): unknown {
 
     if (Array.isArray(rawTrace.steps)) {
       for (const step of rawTrace.steps) {
+        if (step && step.codeContext && typeof step.codeContext === "object") {
+          if (typeof step.codeContext.line === "string") {
+            const parsed = parseInt(step.codeContext.line, 10);
+            if (!isNaN(parsed) && parsed > 0) {
+              step.codeContext.line = parsed;
+            }
+          }
+        }
         if (step && Array.isArray(step.actions)) {
           for (const action of step.actions) {
             if (!action || typeof action !== "object") continue;

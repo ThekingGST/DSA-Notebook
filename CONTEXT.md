@@ -48,3 +48,16 @@ _Avoid_: Manual positioning, coordinate guessing
 A foundational algorithmic classification (e.g. Single-Pass Scanner, Two-Pointer Convergence, Sliding Window, Dual-Array Coordination, In-Place Partitioning, 2D Grid Traversal) that dictates the minimal necessary visual scaffolding (arrays, pointers, variables) for explaining an algorithm.
 _Avoid_: Algorithm category, problem template
 
+**Code Inspector**:
+A dedicated, collapsible docking surface rendered alongside the Canvas Layer that displays syntax-highlighted algorithm source code with synchronized line-execution markers.
+_Avoid_: Code editor, IDE window, script pane
+
+**Code Context**:
+The declarative metadata attached to an Algorithm Step specifying the active 1-indexed source code line and optional block range currently being evaluated.
+_Avoid_: Line pointer, program counter, debug tag
+
+**Synchronized Playback**:
+The bidirectional interaction model that links whiteboard state scrubbing with active Code Inspector line highlights and click-to-seek navigation.
+_Avoid_: Coordinated playback, code tracking
+
+

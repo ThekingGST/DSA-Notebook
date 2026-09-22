@@ -171,6 +171,7 @@ export function computeSnapshots(trace: ExecutionTrace): ComputedSnapshot[] {
       title: step.title,
       explanation: step.explanation,
       state: currentState,
+      codeContext: step.codeContext,
     });
   });
 

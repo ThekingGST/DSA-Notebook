@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { validateExecutionTrace } from "./traceSchema";
+import { validateExecutionTrace, autoHealExecutionTrace } from "./traceSchema";
 import { ExecutionTrace } from "../engine/types";
 
 describe("ExecutionTrace Zod Schema & Validation", () => {
@@ -181,4 +181,42 @@ describe("ExecutionTrace Zod Schema & Validation", () => {
     const result = validateExecutionTrace(traceWithNulls);
     expect(result.success).toBe(true);
   });
+
+  it("validates trace with code and codeContext on steps", () => {
+    const traceWithCode = JSON.parse(JSON.stringify(validTrace));
+    traceWithCode.code = {
+      language: "python",
+      content: "def search(nums, target):\n    return 1",
+    };
+    traceWithCode.steps[0].codeContext = {
+      line: 1,
+      highlightLines: [1, 2],
+      explanation: "Function header",
+    };
+    traceWithCode.steps[1].codeContext = {
+      line: 2,
+    };
+
+    const result = validateExecutionTrace(traceWithCode);
+    expect(result.success).toBe(true);
+    if (result.success) {
+      expect(result.data.code?.language).toBe("python");
+      expect(result.data.steps[0].codeContext?.line).toBe(1);
+    }
+  });
+
+  it("auto-heals raw string code and string line numbers", () => {
+    const raw = JSON.parse(JSON.stringify(validTrace));
+    raw.code = "def sample():\n    pass";
+    raw.steps[0].codeContext = { line: "4" };
+
+    const healed: any = autoHealExecutionTrace(raw);
+
+    expect(healed.code).toEqual({
+      language: "python",
+      content: "def sample():\n    pass",
+    });
+    expect(healed.steps[0].codeContext.line).toBe(4);
+  });
 });
+

@@ -30,4 +30,23 @@ describe("Header component", () => {
     fireEvent.click(studioBtn);
     expect(screen.getByText(/Prompt Studio & Trace Importer/i)).toBeInTheDocument();
   });
+
+  it("renders Code Inspector toggle button and handles click", () => {
+    const onToggleCode = vi.fn();
+    render(
+      <Header
+        mode="student"
+        onModeChange={vi.fn()}
+        isCodeOpen={false}
+        onToggleCode={onToggleCode}
+      />
+    );
+
+    const codeBtn = screen.getByRole("button", { name: /toggle code inspector/i });
+    expect(codeBtn).toBeInTheDocument();
+
+    fireEvent.click(codeBtn);
+    expect(onToggleCode).toHaveBeenCalledTimes(1);
+  });
 });
+

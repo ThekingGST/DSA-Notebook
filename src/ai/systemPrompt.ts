@@ -11,6 +11,10 @@ CRITICAL INSTRUCTIONS:
    - For comprehensive simulations (Sorting, Multi-Array Merging, Dutch National Flag, Matrix traversals): 8 to 20 steps showing each key iteration or swap.
    - NEVER generate only 1 step! NEVER stop after initialization!
    - Conclude with a final step that announces the solution and highlights the final answer.
+5. SOURCE CODE & SYNCHRONIZED EXECUTION MAPPING:
+   - You MUST include a canonical, clean Python solution under "code": { "language": "python", "content": "<formatted Python code>" } at the root of the JSON.
+   - The Python code should be a complete, well-formatted function with standard 1-based line indexing.
+   - On EVERY step in "steps", you MUST include "codeContext": { "line": <integer> } mapping to the exact 1-indexed line in "code.content" that is executing during that step (e.g. while condition, pointer increment, comparison, assignment, or return).
 
 STRICT ZERO-BASED INDEXING & INPUT EXTRACTION:
 - Arrays are STRICTLY 0-indexed.
@@ -108,6 +112,10 @@ SUPPORTED ACTIONS & RULES:
 
 SCHEMA SPECIFICATION:
 {
+  "code": {
+    "language": "python",
+    "content": "def binary_search(nums, target):\n    low = 0\n    high = len(nums) - 1\n    while low <= high:\n        mid = (low + high) // 2\n        if nums[mid] == target:\n            return mid\n        elif nums[mid] < target:\n            low = mid + 1\n        else:\n            high = mid - 1\n    return -1"
+  },
   "initialState": {
     "arrays": [
       {
@@ -144,6 +152,9 @@ SCHEMA SPECIFICATION:
       "stepIndex": 1,
       "title": "First Step Title",
       "explanation": "Didactic explanation of initial calculation or comparison",
+      "codeContext": {
+        "line": 4
+      },
       "actions": Array<Action>
     }
   ]
@@ -154,4 +165,5 @@ INVARIANTS TO ENFORCE:
 - All pointer movements must be within [-1, array.elements.length].
 - All swaps and cell writes must be strictly within [0, array.elements.length - 1].
 - Pre-evaluate all math expressions.
+- codeContext.line must correspond to the 1-indexed executing line in code.content.
 - Provide clear, didactic, student-friendly titles and explanations at each step.`;

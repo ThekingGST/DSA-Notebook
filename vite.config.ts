@@ -2,7 +2,12 @@ import { defineConfig, configDefaults } from "vitest/config";
 import { searchForWorkspaceRoot } from "vite";
 import react from "@vitejs/plugin-react";
 
-import { handleAntigravityStatus, handleAntigravityGenerate } from "./src/server/antigravityMiddleware";
+import {
+  handleAntigravityStatus,
+  handleAntigravityGenerate,
+  handleAntigravityTranslate,
+  handleAntigravityGenerateCode,
+} from "./src/server/antigravityMiddleware";
 
 function antigravityPlugin() {
   return {
@@ -16,6 +21,20 @@ function antigravityPlugin() {
         }
         if (url === "/api/antigravity/generate") {
           handleAntigravityGenerate(req, res).catch((err) => {
+            res.statusCode = 500;
+            res.end(JSON.stringify({ error: String(err) }));
+          });
+          return;
+        }
+        if (url === "/api/antigravity/translate") {
+          handleAntigravityTranslate(req, res).catch((err) => {
+            res.statusCode = 500;
+            res.end(JSON.stringify({ error: String(err) }));
+          });
+          return;
+        }
+        if (url === "/api/antigravity/generate-code") {
+          handleAntigravityGenerateCode(req, res).catch((err) => {
             res.statusCode = 500;
             res.end(JSON.stringify({ error: String(err) }));
           });

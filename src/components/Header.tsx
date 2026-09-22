@@ -11,9 +11,17 @@ interface HeaderProps {
   mode: WorkspaceMode;
   onModeChange: (mode: WorkspaceMode) => void;
   onLoadTrace?: (trace: ExecutionTrace) => void;
+  isCodeOpen?: boolean;
+  onToggleCode?: () => void;
 }
 
-export const Header: React.FC<HeaderProps> = ({ mode, onModeChange, onLoadTrace }) => {
+export const Header: React.FC<HeaderProps> = ({
+  mode,
+  onModeChange,
+  onLoadTrace,
+  isCodeOpen,
+  onToggleCode,
+}) => {
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [isStudioOpen, setIsStudioOpen] = useState(false);
   const [hasKey, setHasKey] = useState<boolean>(() => !!getNvidiaApiKey());
@@ -75,6 +83,23 @@ export const Header: React.FC<HeaderProps> = ({ mode, onModeChange, onLoadTrace 
             >
               🤖 Antigravity Connected
             </span>
+          )}
+          {onToggleCode && (
+            <button
+              type="button"
+              className={`api-key-header-btn code-inspector-toggle-btn ${isCodeOpen ? "active" : ""}`}
+              onClick={onToggleCode}
+              title="Toggle Code Inspector Drawer"
+              aria-label="Toggle Code Inspector"
+              data-testid="toggle-code-inspector-btn"
+              style={{
+                background: isCodeOpen ? "rgba(99, 102, 241, 0.25)" : "rgba(255, 255, 255, 0.06)",
+                color: isCodeOpen ? "#a5b4fc" : "#e4e4e7",
+                border: isCodeOpen ? "1px solid #6366f1" : "1px solid #3f3f46",
+              }}
+            >
+              💻 Code
+            </button>
           )}
           <button
             type="button"

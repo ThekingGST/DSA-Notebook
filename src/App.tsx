@@ -6,86 +6,18 @@ import { PromptBar } from "./components/PromptBar";
 import { TeacherToolbox } from "./components/TeacherToolbox";
 import { ArrayEndControls } from "./components/ArrayEndControls";
 import { CellInlineEditor, ActiveCellEdit } from "./components/CellInlineEditor";
+import { CodeInspector } from "./components/CodeInspector";
 import { useAlgorithmPlayback } from "./hooks/useAlgorithmPlayback";
 import { useTeacherMode } from "./hooks/useTeacherMode";
 import { compileDSAToExcalidraw } from "./compiler/compileDSAToExcalidraw";
-import { ExecutionTrace } from "./engine/types";
+import { ExecutionTrace, AlgorithmCode } from "./engine/types";
 import { ErrorBoundary } from "./components/ErrorBoundary";
 import { queryLLMTrace, cleanJsonOutput, checkAntigravityStatus } from "./ai/llmService";
 import { autoHealExecutionTrace, validateExecutionTrace } from "./ai/traceSchema";
+import { ALGORITHM_PRESETS } from "./ai/presets";
 import "./App.css";
 
-const canonicalTrace: ExecutionTrace = {
-  initialState: {
-    arrays: [
-      {
-        id: "A",
-        name: "nums",
-        elements: [10, 25, 7, 42, 18],
-        position: { x: 140, y: 320 },
-        cellWidth: 70,
-        cellHeight: 56,
-      },
-    ],
-    pointers: [
-      { id: "p1", name: "i", targetArrayId: "A", index: 0, color: "#a78bfa" },
-      { id: "p2", name: "max", targetArrayId: "A", index: 0, color: "#34d399" },
-    ],
-    variables: [
-      { id: "v1", name: "largest", value: 10, color: "#34d399" },
-      { id: "v2", name: "secondLargest", value: "-inf", color: "#fbbf24" },
-    ],
-    narration: {
-      title: "Step 0: Initial State",
-      text: "Initialize pointers i = 0 and max = 0. Largest = 10, SecondLargest = -inf.",
-    },
-  },
-  steps: [
-    {
-      stepIndex: 1,
-      title: "Step 1: Compare nums[1] with largest",
-      explanation: "Comparing nums[1] (25) > largest (10). Condition is true.",
-      actions: [
-        { type: "move_pointer", pointerId: "p1", toIndex: 1 },
-        { type: "compare", arrayId: "A", indexA: 1, operator: ">", result: true },
-        { type: "set_variable", variableId: "v2", value: 10 },
-        { type: "set_variable", variableId: "v1", value: 25 },
-        { type: "move_pointer", pointerId: "p2", toIndex: 1 },
-      ],
-    },
-    {
-      stepIndex: 2,
-      title: "Step 2: Inspect nums[2]",
-      explanation: "Comparing nums[2] (7) with largest (25). 7 < 25, largest unchanged.",
-      actions: [
-        { type: "move_pointer", pointerId: "p1", toIndex: 2 },
-        { type: "compare", arrayId: "A", indexA: 2, operator: "<=", result: false },
-      ],
-    },
-    {
-      stepIndex: 3,
-      title: "Step 3: New maximum found at nums[3]",
-      explanation: "nums[3] (42) > largest (25). SecondLargest becomes 25, largest becomes 42.",
-      actions: [
-        { type: "move_pointer", pointerId: "p1", toIndex: 3 },
-        { type: "compare", arrayId: "A", indexA: 3, operator: ">", result: true },
-        { type: "set_variable", variableId: "v2", value: 25 },
-        { type: "set_variable", variableId: "v1", value: 42 },
-        { type: "move_pointer", pointerId: "p2", toIndex: 3 },
-      ],
-    },
-    {
-      stepIndex: 4,
-      title: "Step 4: Scan complete",
-      explanation: "Inspected nums[4] (18). Scan finished. Largest = 42, SecondLargest = 25.",
-      actions: [
-        { type: "move_pointer", pointerId: "p1", toIndex: 4 },
-        { type: "compare", arrayId: "A", indexA: 4, operator: "<=", result: false },
-        { type: "clear_highlights" },
-      ],
-    },
-  ],
-};
+const canonicalTrace: ExecutionTrace = ALGORITHM_PRESETS.secondLargest.trace;
 
 export const App: React.FC = () => {
   const initialMode = useMemo<WorkspaceMode>(() => {
@@ -109,6 +41,7 @@ export const App: React.FC = () => {
   const [aiLoadingMessage, setAiLoadingMessage] = useState("AI Tutor is reasoning & generating algorithm steps...");
   const [aiError, setAiError] = useState<string | null>(null);
   const [lastPrompt, setLastPrompt] = useState<string>("");
+  const [isCodeOpen, setIsCodeOpen] = useState<boolean>(false);
 
   // Student mode playback
   const {
@@ -116,11 +49,50 @@ export const App: React.FC = () => {
     totalSteps,
     isPlaying,
     isRapidStepping,
+    currentSnapshot,
     currentState: studentState,
     stepTo,
     togglePlay,
     reset: resetPlayback,
   } = useAlgorithmPlayback(activeTrace, { initialStep });
+
+  const handleSeekToLine = useCallback(
+    (targetLine: number) => {
+      if (!activeTrace.steps) return;
+      const stepIdx = activeTrace.steps.findIndex(
+        (s) =>
+          s.codeContext?.line === targetLine ||
+          s.codeContext?.highlightLines?.includes(targetLine)
+      );
+      if (stepIdx !== -1) {
+        stepTo(stepIdx + 1);
+      }
+    },
+    [activeTrace.steps, stepTo]
+  );
+
+  const handleCodeGenerated = useCallback(
+    (newCode: AlgorithmCode, stepLineMap?: number[]) => {
+      setActiveTrace((prevTrace) => {
+        const updatedSteps = prevTrace.steps.map((step, idx) => {
+          const line = stepLineMap?.[idx];
+          if (line && line > 0) {
+            return {
+              ...step,
+              codeContext: { line },
+            };
+          }
+          return step;
+        });
+        return {
+          ...prevTrace,
+          code: newCode,
+          steps: updatedSteps,
+        };
+      });
+    },
+    []
+  );
 
   const handlePromptSubmit = useCallback(async (query: string) => {
     setIsAiLoading(true);
@@ -284,13 +256,31 @@ export const App: React.FC = () => {
   return (
     <ErrorBoundary>
       <div className="app-container">
-        <Header mode={mode} onModeChange={setMode} onLoadTrace={setActiveTrace} />
+        <Header
+          mode={mode}
+          onModeChange={setMode}
+          onLoadTrace={setActiveTrace}
+          isCodeOpen={isCodeOpen}
+          onToggleCode={() => setIsCodeOpen((prev) => !prev)}
+        />
         <main className="main-viewport">
           <WhiteboardCanvas
             mode={mode}
             initialElements={compiledElements}
             isRapidStepping={isRapidStepping}
             onCanvasAction={handleCanvasAction}
+          />
+
+          {/* Code Inspector Drawer */}
+          <CodeInspector
+            isOpen={isCodeOpen}
+            onClose={() => setIsCodeOpen(false)}
+            code={activeTrace.code}
+            currentLine={currentSnapshot?.codeContext?.line}
+            highlightLines={currentSnapshot?.codeContext?.highlightLines}
+            onSeekToLine={handleSeekToLine}
+            onCodeGenerated={handleCodeGenerated}
+            trace={activeTrace}
           />
 
           {/* Student Mode: Playback Dock & Prompt Bar */}

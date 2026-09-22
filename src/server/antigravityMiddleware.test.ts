@@ -123,4 +123,89 @@ describe("antigravityMiddleware", () => {
       expect(getOutput()).toContain("Failed to parse Antigravity CLI response as JSON");
     });
   });
+
+  describe("handleAntigravityTranslate", () => {
+    it("rejects non-POST with 405", async () => {
+      const req = createMockReq("GET");
+      const { res, getOutput } = createMockRes();
+
+      await middleware.handleAntigravityTranslate(req, res);
+
+      expect(res.statusCode).toBe(405);
+      expect(getOutput()).toContain("Method Not Allowed");
+    });
+
+    it("returns translated code on valid request", async () => {
+      const mockTranslated = "public class Solution {\n    // Java code\n}";
+      vi.spyOn(middleware.agyExecutor, "execute").mockResolvedValue(
+        `\`\`\`java\n${mockTranslated}\n\`\`\``
+      );
+
+      const req = createMockReq("POST", {
+        code: "def solution():\n    pass",
+        toLanguage: "java",
+        fromLanguage: "python",
+      });
+      const { res, getOutput } = createMockRes();
+
+      await middleware.handleAntigravityTranslate(req, res);
+
+      expect(res.statusCode).toBe(200);
+      const data = JSON.parse(getOutput());
+      expect(data.success).toBe(true);
+      expect(data.translatedCode).toBe(mockTranslated);
+      expect(data.language).toBe("java");
+    });
+
+    it("returns identical code if fromLanguage equals toLanguage", async () => {
+      const pythonCode = "def test():\n    return 42";
+      const req = createMockReq("POST", {
+        code: pythonCode,
+        toLanguage: "python",
+        fromLanguage: "python",
+      });
+      const { res, getOutput } = createMockRes();
+
+      await middleware.handleAntigravityTranslate(req, res);
+
+      expect(res.statusCode).toBe(200);
+      const data = JSON.parse(getOutput());
+      expect(data.translatedCode).toBe(pythonCode);
+    });
+  });
+
+  describe("handleAntigravityGenerateCode", () => {
+    it("generates code and stepLineMap for a trace", async () => {
+      const mockResult = {
+        code: {
+          language: "python",
+          content: "def algo():\n    return 1",
+        },
+        stepLineMap: [1, 2],
+      };
+
+      vi.spyOn(middleware.agyExecutor, "execute").mockResolvedValue(
+        `\`\`\`json\n${JSON.stringify(mockResult)}\n\`\`\``
+      );
+
+      const req = createMockReq("POST", {
+        trace: {
+          initialState: { narration: { title: "Test Algorithm" } },
+          steps: [
+            { title: "Step 1", explanation: "First" },
+            { title: "Step 2", explanation: "Second" },
+          ],
+        },
+      });
+      const { res, getOutput } = createMockRes();
+
+      await middleware.handleAntigravityGenerateCode(req, res);
+
+      expect(res.statusCode).toBe(200);
+      const data = JSON.parse(getOutput());
+      expect(data.success).toBe(true);
+      expect(data.code.language).toBe("python");
+      expect(data.stepLineMap).toEqual([1, 2]);
+    });
+  });
 });
