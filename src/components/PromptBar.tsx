@@ -6,6 +6,7 @@ export interface PromptBarProps {
   onSubmit: (query: string) => Promise<void> | void;
   isLoading: boolean;
   errorMessage?: string | null;
+  loadingMessage?: string | null;
   onRetry?: () => void;
 }
 
@@ -13,6 +14,7 @@ export const PromptBar: React.FC<PromptBarProps> = ({
   onSubmit,
   isLoading,
   errorMessage,
+  loadingMessage,
   onRetry,
 }) => {
   const [query, setQuery] = useState("");
@@ -76,7 +78,7 @@ export const PromptBar: React.FC<PromptBarProps> = ({
         {isLoading && (
           <div className="prompt-loading-indicator">
             <div className="prompt-spinner" />
-            <span>AI Tutor is reasoning & generating algorithm steps...</span>
+            <span>{loadingMessage || "AI Tutor is reasoning & generating algorithm steps..."}</span>
           </div>
         )}
 

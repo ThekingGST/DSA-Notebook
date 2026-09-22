@@ -1,7 +1,7 @@
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import { ApiKeyModal } from "./ApiKeyModal";
 import { PromptStudioModal } from "./PromptStudioModal";
-import { getNvidiaApiKey } from "../ai/llmService";
+import { getNvidiaApiKey, checkAntigravityStatus } from "../ai/llmService";
 import { ExecutionTrace } from "../engine/types";
 import "./Header.css";
 
@@ -17,6 +17,11 @@ export const Header: React.FC<HeaderProps> = ({ mode, onModeChange, onLoadTrace 
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [isStudioOpen, setIsStudioOpen] = useState(false);
   const [hasKey, setHasKey] = useState<boolean>(() => !!getNvidiaApiKey());
+  const [isAgyAvailable, setIsAgyAvailable] = useState<boolean>(false);
+
+  useEffect(() => {
+    checkAntigravityStatus().then((available) => setIsAgyAvailable(available));
+  }, []);
 
   const handleSaved = () => {
     setHasKey(!!getNvidiaApiKey());
@@ -51,6 +56,26 @@ export const Header: React.FC<HeaderProps> = ({ mode, onModeChange, onLoadTrace 
           </div>
         </div>
         <div className="header-right" style={{ gap: "10px" }}>
+          {isAgyAvailable && (
+            <span
+              className="status-indicator agy-connected-badge"
+              style={{
+                display: "inline-flex",
+                alignItems: "center",
+                gap: "5px",
+                background: "rgba(34, 197, 94, 0.15)",
+                color: "#4ade80",
+                border: "1px solid rgba(34, 197, 94, 0.3)",
+                borderRadius: "9999px",
+                padding: "4px 10px",
+                fontSize: "12px",
+                fontWeight: 500,
+              }}
+              title="Antigravity CLI is active and ready for automated generation"
+            >
+              🤖 Antigravity Connected
+            </span>
+          )}
           <button
             type="button"
             className="api-key-header-btn studio-header-btn"

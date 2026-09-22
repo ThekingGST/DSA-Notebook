@@ -7,6 +7,7 @@ import {
   getNvidiaModel,
   cleanJsonOutput,
   repairTruncatedJson,
+  queryAntigravityTrace,
 } from "./llmService";
 import { validateExecutionTrace } from "./traceSchema";
 
@@ -252,6 +253,33 @@ describe("Seam 2: AI Step Protocol & LLM Service Integration", () => {
     // Verify the second call prompt contained the validation error feedback
     const secondCallPrompt = mockFetcher.mock.calls[1][0];
     expect(secondCallPrompt).toContain("VALIDATION ERROR");
+  });
+
+  it("calls /api/antigravity/generate and returns parsed trace on success", async () => {
+    const mockTrace = ALGORITHM_PRESETS.twoPointers.trace;
+    globalThis.fetch = vi.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({ success: true, trace: mockTrace }),
+    } as Response);
+
+    const trace = await queryAntigravityTrace("Reverse array with two pointers");
+    expect(globalThis.fetch).toHaveBeenCalledWith("/api/antigravity/generate", expect.objectContaining({
+      method: "POST",
+      body: JSON.stringify({ query: "Reverse array with two pointers" }),
+    }));
+    expect(trace.initialState.arrays[0].name).toBe("arr");
+  });
+
+  it("throws clear error when /api/antigravity/generate returns failure status", async () => {
+    globalThis.fetch = vi.fn().mockResolvedValue({
+      ok: false,
+      status: 500,
+      json: async () => ({ error: "Antigravity CLI execution timed out" }),
+    } as Response);
+
+    await expect(queryAntigravityTrace("Crash test")).rejects.toThrow(
+      /Antigravity CLI execution timed out/
+    );
   });
 });
 

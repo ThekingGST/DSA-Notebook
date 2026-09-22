@@ -8,6 +8,48 @@ export interface LLMServiceOptions {
   apiKey?: string;
   model?: string;
   maxAttempts?: number;
+  provider?: "antigravity" | "nvidia" | "auto";
+}
+
+export async function checkAntigravityStatus(): Promise<boolean> {
+  const isTestEnv =
+    (typeof process !== "undefined" && process.env?.NODE_ENV === "test") ||
+    (typeof import.meta !== "undefined" && import.meta.env?.MODE === "test");
+  if (isTestEnv || typeof window === "undefined") return false;
+
+  try {
+    const res = await fetch("/api/antigravity/status", { method: "GET" });
+    if (!res.ok) return false;
+    const data = await res.json();
+    return !!data?.available;
+  } catch {
+    return false;
+  }
+}
+
+export async function queryAntigravityTrace(query: string): Promise<ExecutionTrace> {
+  const res = await fetch("/api/antigravity/generate", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ query }),
+  });
+
+  if (!res.ok) {
+    let errMessage = "";
+    try {
+      const errJson = await res.json();
+      errMessage = errJson.error || JSON.stringify(errJson);
+    } catch {
+      errMessage = await res.text();
+    }
+    throw new Error(errMessage || `Antigravity CLI generation failed with status ${res.status}`);
+  }
+
+  const data = await res.json();
+  if (!data.success || !data.trace) {
+    throw new Error(data.error || "Antigravity CLI did not return a valid execution trace.");
+  }
+  return data.trace;
 }
 
 export function getNvidiaApiKey(): string | undefined {
@@ -251,6 +293,18 @@ export async function queryLLMTrace(
       normalized === preset.prompt.toLowerCase()
     ) {
       return preset.trace;
+    }
+  }
+
+  // Priority 1: Automated Antigravity CLI Bridge (if available and not overridden)
+  if (!options.fetcher && !options.apiKey && options.provider !== "nvidia") {
+    const isAgyAvailable = await checkAntigravityStatus();
+    if (isAgyAvailable) {
+      try {
+        return await queryAntigravityTrace(query);
+      } catch (agyErr) {
+        console.warn("Antigravity CLI generation failed, falling back to next provider:", agyErr);
+      }
     }
   }
 

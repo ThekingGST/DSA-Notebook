@@ -11,7 +11,7 @@ import { useTeacherMode } from "./hooks/useTeacherMode";
 import { compileDSAToExcalidraw } from "./compiler/compileDSAToExcalidraw";
 import { ExecutionTrace } from "./engine/types";
 import { ErrorBoundary } from "./components/ErrorBoundary";
-import { queryLLMTrace, cleanJsonOutput } from "./ai/llmService";
+import { queryLLMTrace, cleanJsonOutput, checkAntigravityStatus } from "./ai/llmService";
 import { autoHealExecutionTrace, validateExecutionTrace } from "./ai/traceSchema";
 import "./App.css";
 
@@ -106,6 +106,7 @@ export const App: React.FC = () => {
 
   const [activeTrace, setActiveTrace] = useState<ExecutionTrace>(canonicalTrace);
   const [isAiLoading, setIsAiLoading] = useState(false);
+  const [aiLoadingMessage, setAiLoadingMessage] = useState("AI Tutor is reasoning & generating algorithm steps...");
   const [aiError, setAiError] = useState<string | null>(null);
   const [lastPrompt, setLastPrompt] = useState<string>("");
 
@@ -125,6 +126,13 @@ export const App: React.FC = () => {
     setIsAiLoading(true);
     setAiError(null);
     setLastPrompt(query);
+
+    const isAgy = await checkAntigravityStatus();
+    setAiLoadingMessage(
+      isAgy
+        ? "🤖 Antigravity CLI is reasoning & generating algorithm steps..."
+        : "AI Tutor is reasoning & generating algorithm steps..."
+    );
 
     const trimmed = query.trim();
 
@@ -299,6 +307,7 @@ export const App: React.FC = () => {
               <PromptBar
                 onSubmit={handlePromptSubmit}
                 isLoading={isAiLoading}
+                loadingMessage={aiLoadingMessage}
                 errorMessage={aiError}
                 onRetry={handlePromptRetry}
               />

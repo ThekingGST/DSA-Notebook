@@ -1,7 +1,7 @@
-import React, { useState, useMemo } from "react";
+import React, { useState, useMemo, useEffect } from "react";
 import { ExecutionTrace } from "../engine/types";
 import { buildAlgorithmPrompt } from "../ai/promptBuilder";
-import { cleanJsonOutput } from "../ai/llmService";
+import { cleanJsonOutput, checkAntigravityStatus, queryAntigravityTrace } from "../ai/llmService";
 import { autoHealExecutionTrace, validateExecutionTrace, ValidationResult } from "../ai/traceSchema";
 import "./PromptStudioModal.css";
 
@@ -141,6 +141,30 @@ export const PromptStudioModal: React.FC<PromptStudioModalProps> = ({
   );
   const [copied, setCopied] = useState(false);
   const [pastedJson, setPastedJson] = useState("");
+  const [isAgyAvailable, setIsAgyAvailable] = useState(false);
+  const [isGeneratingWithAgy, setIsGeneratingWithAgy] = useState(false);
+  const [agyError, setAgyError] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (isOpen) {
+      checkAntigravityStatus().then((avail) => setIsAgyAvailable(avail));
+    }
+  }, [isOpen]);
+
+  const handleRunAntigravity = async () => {
+    if (!algorithmQuery.trim() || isGeneratingWithAgy) return;
+    setIsGeneratingWithAgy(true);
+    setAgyError(null);
+    try {
+      const trace = await queryAntigravityTrace(algorithmQuery.trim());
+      onLoadTrace(trace);
+      onClose();
+    } catch (err: unknown) {
+      setAgyError(err instanceof Error ? err.message : String(err));
+    } finally {
+      setIsGeneratingWithAgy(false);
+    }
+  };
 
   const fullPromptToCopy = useMemo(() => {
     const { systemPrompt, userPrompt } = buildAlgorithmPrompt(algorithmQuery);
@@ -325,7 +349,28 @@ export const PromptStudioModal: React.FC<PromptStudioModalProps> = ({
               <pre className="studio-prompt-preview">{fullPromptToCopy}</pre>
             </div>
 
-            <div className="studio-actions">
+            {agyError && (
+              <div className="studio-alert-error" role="alert" style={{ marginBottom: "12px" }}>
+                <span>⚠️</span>
+                <div>{agyError}</div>
+              </div>
+            )}
+
+            <div className="studio-actions" style={{ display: "flex", gap: "10px", flexWrap: "wrap" }}>
+              {isAgyAvailable && (
+                <button
+                  type="button"
+                  className="studio-btn-primary"
+                  style={{
+                    background: "linear-gradient(135deg, #10b981 0%, #059669 100%)",
+                    borderColor: "#34d399",
+                  }}
+                  disabled={isGeneratingWithAgy || !algorithmQuery.trim()}
+                  onClick={handleRunAntigravity}
+                >
+                  {isGeneratingWithAgy ? "🤖 Running Antigravity CLI..." : "🤖 Run with Antigravity CLI (Auto)"}
+                </button>
+              )}
               <button
                 type="button"
                 className={`studio-btn-primary ${copied ? "studio-btn-copied" : ""}`}
