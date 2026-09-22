@@ -9,9 +9,9 @@ export interface PromptPayload {
 export function buildAlgorithmPrompt(userQuery: string): PromptPayload {
   return {
     systemPrompt: SYSTEM_PROMPT,
-    userPrompt: `Generate a complete, multi-step ExecutionTrace (strictly 4 to 8 steps) simulating the algorithm from start to final answer for:
+    userPrompt: `Classify the following problem into its core array archetype and generate a complete, multi-step ExecutionTrace simulating the algorithm from start to final solution for:
 "${userQuery}"
-IMPORTANT: Do NOT stop after step 1 or only initialize variables. You MUST simulate all loop steps and pointer movements until the algorithm finishes and reaches the final result.`,
+IMPORTANT: Do NOT stop after initialization or step 1. You MUST simulate the key iterations, comparisons, pointer advances, and element mutations until the algorithm reaches its final verified result.`,
   };
 }
 
