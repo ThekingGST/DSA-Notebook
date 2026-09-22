@@ -51,11 +51,52 @@ export function setNvidiaModel(model: string): void {
   }
 }
 
+export function repairTruncatedJson(str: string): string {
+  let s = str.trim();
+
+  // Strip trailing commas before closing braces/brackets
+  s = s.replace(/,\s*([}\]])/g, "$1");
+
+  // If already valid JSON, return immediately
+  try {
+    JSON.parse(s);
+    return s;
+  } catch {
+    // Continue with repair attempts
+  }
+
+  // Check if we have an unclosed steps array
+  const stepsIndex = s.indexOf('"steps"');
+  if (stepsIndex !== -1) {
+    let idx = s.lastIndexOf("}");
+    while (idx > stepsIndex) {
+      const candidate = s.slice(0, idx + 1).replace(/,\s*$/, "");
+      try {
+        const testStr = candidate + "\n  ]\n}";
+        JSON.parse(testStr);
+        return testStr;
+      } catch {
+        try {
+          const testStr = candidate + "\n}";
+          JSON.parse(testStr);
+          return testStr;
+        } catch {
+          idx = s.lastIndexOf("}", idx - 1);
+        }
+      }
+    }
+  }
+
+  return s;
+}
+
 export function cleanJsonOutput(raw: string): string {
   let trimmed = raw.trim();
 
   // Strip <think>...</think> blocks if present from reasoning models
   trimmed = trimmed.replace(/<think>[\s\S]*?<\/think>/gi, "").trim();
+
+  let candidateJson = trimmed;
 
   // Handle markdown code-fenced JSON responses (prefer valid JSON blocks if reasoning text has fences)
   const fenceMatches = Array.from(trimmed.matchAll(/```(?:json)?\s*([\s\S]*?)\s*```/g));
@@ -63,20 +104,25 @@ export function cleanJsonOutput(raw: string): string {
     for (let i = fenceMatches.length - 1; i >= 0; i--) {
       const candidate = fenceMatches[i][1].trim();
       if (candidate.startsWith("{") && candidate.endsWith("}")) {
-        return candidate;
+        candidateJson = candidate;
+        break;
       }
     }
-    return fenceMatches[fenceMatches.length - 1][1].trim();
+    if (candidateJson === trimmed) {
+      candidateJson = fenceMatches[fenceMatches.length - 1][1].trim();
+    }
+  } else {
+    // Handle cases where model adds introductory prose before or after raw JSON
+    const firstBrace = trimmed.indexOf("{");
+    const lastBrace = trimmed.lastIndexOf("}");
+    if (firstBrace !== -1 && lastBrace !== -1 && lastBrace > firstBrace) {
+      candidateJson = trimmed.slice(firstBrace, lastBrace + 1);
+    } else if (firstBrace !== -1) {
+      candidateJson = trimmed.slice(firstBrace);
+    }
   }
 
-  // Handle cases where model adds introductory prose before or after raw JSON
-  const firstBrace = trimmed.indexOf("{");
-  const lastBrace = trimmed.lastIndexOf("}");
-  if (firstBrace !== -1 && lastBrace !== -1 && lastBrace > firstBrace) {
-    return trimmed.slice(firstBrace, lastBrace + 1);
-  }
-
-  return trimmed;
+  return repairTruncatedJson(candidateJson);
 }
 
 export async function queryLLMTrace(
@@ -138,7 +184,7 @@ export async function queryLLMTrace(
               { role: "user", content: userPrompt },
             ],
             temperature: 0.2,
-            max_tokens: model.includes("nemotron") ? 6144 : 2500,
+            max_tokens: model.includes("nemotron") ? 6144 : 4096,
           }),
           signal: controller.signal,
         });

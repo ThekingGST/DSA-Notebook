@@ -5,6 +5,8 @@ import {
   getNvidiaApiKey,
   setNvidiaApiKey,
   getNvidiaModel,
+  cleanJsonOutput,
+  repairTruncatedJson,
 } from "./llmService";
 import { validateExecutionTrace } from "./traceSchema";
 
@@ -168,4 +170,25 @@ describe("Seam 2: AI Step Protocol & LLM Service Integration", () => {
       }
     }
   });
+
+  it("repairs truncated JSON responses when token limit cuts off mid-step", () => {
+    const step1 = ALGORITHM_PRESETS.linearScan.trace.steps[0];
+    const step2 = ALGORITHM_PRESETS.linearScan.trace.steps[1];
+    const truncated = `{"initialState": ${JSON.stringify(ALGORITHM_PRESETS.linearScan.trace.initialState)}, "steps": [${JSON.stringify(step1)}, ${JSON.stringify(step2)}, {"stepIndex": 3, "title": "Incomplete", "actions": [{"type": "move_`;
+
+    const cleaned = cleanJsonOutput(truncated);
+    const parsed = JSON.parse(cleaned);
+
+    expect(parsed.initialState).toBeDefined();
+    expect(parsed.steps).toHaveLength(2);
+    expect(parsed.steps[0].stepIndex).toBe(step1.stepIndex);
+    expect(parsed.steps[1].stepIndex).toBe(step2.stepIndex);
+  });
+
+  it("removes trailing commas before closing braces", () => {
+    const jsonWithTrailingCommas = '{\n  "name": "test",\n  "values": [1, 2, ],\n}';
+    const repaired = repairTruncatedJson(jsonWithTrailingCommas);
+    expect(() => JSON.parse(repaired)).not.toThrow();
+  });
 });
+
