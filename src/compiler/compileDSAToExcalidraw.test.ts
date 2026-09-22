@@ -189,5 +189,30 @@ describe("compileDSAToExcalidraw", () => {
     expect(ptr2).toBeDefined();
     expect(ptr2!.y).toBeGreaterThan(cellA0!.y);
   });
+
+  it("renders left-aligned array name badge for each array", () => {
+    const state: DSAState = {
+      arrays: [
+        {
+          id: "arr1",
+          name: "prefixSum",
+          elements: [10, 20, 30],
+          position: { x: 140, y: 260 },
+        },
+      ],
+      pointers: [],
+      variables: [],
+    };
+
+    const elements = compileDSAToExcalidraw(state);
+    const nameEl = elements.find((el) => el.id === "name_arr1");
+
+    expect(nameEl).toBeDefined();
+    expect(nameEl?.type).toBe("text");
+    expect(nameEl?.text).toBe("prefixSum:");
+    expect(nameEl?.customData?.dsaType).toBe("arrayName");
+    // Positioned to the left of the array cells
+    expect(nameEl!.x).toBeLessThan(140);
+  });
 });
 

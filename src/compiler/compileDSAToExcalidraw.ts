@@ -149,6 +149,33 @@ export function compileDSAToExcalidraw(
   effectiveArrays.forEach((arr) => {
     const groupId = `group_${arr.id}`;
 
+    // Render left-side array name badge
+    if (arr.name) {
+      const nameBadgeWidth = 85;
+      const nameBadgeX = Math.max(10, arr.position.x - nameBadgeWidth - 10);
+      const nameBadgeY = Math.round(arr.position.y + (ArrayLayout.DEFAULT_CELL_HEIGHT - 24) / 2);
+      const nameText = `${arr.name}:`;
+
+      const nameEl = createBaseElement(
+        `name_${arr.id}`,
+        "text",
+        nameBadgeX,
+        nameBadgeY,
+        nameBadgeWidth,
+        24,
+        [groupId],
+        { dsaType: "arrayName", arrayId: arr.id }
+      );
+      nameEl.text = nameText;
+      nameEl.originalText = nameText;
+      nameEl.fontSize = 16;
+      nameEl.fontFamily = 1;
+      nameEl.textAlign = "right";
+      nameEl.verticalAlign = "middle";
+      nameEl.strokeColor = "#71717a";
+      elements.push(nameEl);
+    }
+
     arr.elements.forEach((val, idx) => {
       const cellBounds = ArrayLayout.getCellBounds(arr, idx);
       const cellX = cellBounds.x;
