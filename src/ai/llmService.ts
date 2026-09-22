@@ -1,12 +1,13 @@
 import { ExecutionTrace } from "../engine/types";
 import { ALGORITHM_PRESETS } from "./presets";
-import { validateExecutionTrace } from "./traceSchema";
+import { validateExecutionTrace, autoHealExecutionTrace } from "./traceSchema";
 import { buildAlgorithmPrompt } from "./promptBuilder";
 
 export interface LLMServiceOptions {
   fetcher?: (prompt: string, systemPrompt: string) => Promise<string>;
   apiKey?: string;
   model?: string;
+  maxAttempts?: number;
 }
 
 export function getNvidiaApiKey(): string | undefined {
@@ -160,6 +161,83 @@ export function cleanJsonOutput(raw: string): string {
   return repairTruncatedJson(sanitized);
 }
 
+interface ChatMessage {
+  role: "system" | "user" | "assistant";
+  content: string;
+}
+
+async function fetchNvidiaChatCompletion(
+  messages: ChatMessage[],
+  apiKey: string,
+  model: string
+): Promise<string> {
+  const isTestEnv =
+    (typeof process !== "undefined" && process.env?.NODE_ENV === "test") ||
+    (typeof import.meta !== "undefined" && import.meta.env?.MODE === "test");
+
+  const endpoint =
+    !isTestEnv &&
+    typeof window !== "undefined" &&
+    window.location.hostname === "localhost"
+      ? "/api/nvidia/chat/completions"
+      : "https://integrate.api.nvidia.com/v1/chat/completions";
+
+  const controller = new AbortController();
+  const timeoutMs = 120000;
+  const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
+
+  let res: Response;
+  try {
+    res = await fetch(endpoint, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${apiKey}`,
+      },
+      body: JSON.stringify({
+        model,
+        messages,
+        temperature: 0.2,
+        max_tokens: model.includes("nemotron") ? 6144 : 4096,
+      }),
+      signal: controller.signal,
+    });
+  } catch (networkErr: unknown) {
+    if (
+      (networkErr instanceof DOMException && networkErr.name === "AbortError") ||
+      (networkErr instanceof Error && networkErr.name === "AbortError")
+    ) {
+      throw new Error(
+        `Request timed out after 2 minutes. The NVIDIA API server is experiencing high latency. Please retry your request.`
+      );
+    }
+    throw new Error(
+      `Network connection failed when connecting to NVIDIA API. Please check your internet connection.`
+    );
+  } finally {
+    clearTimeout(timeoutId);
+  }
+
+  if (!res.ok) {
+    let errorDetail = "";
+    try {
+      const errorJson = await res.json();
+      errorDetail =
+        errorJson?.message ||
+        errorJson?.error?.message ||
+        JSON.stringify(errorJson);
+    } catch {
+      errorDetail = await res.text();
+    }
+    throw new Error(
+      `NVIDIA API error (${res.status}): ${errorDetail || res.statusText}. Please verify your API key.`
+    );
+  }
+
+  const data = await res.json();
+  return data?.choices?.[0]?.message?.content || "";
+}
+
 export async function queryLLMTrace(
   query: string,
   options: LLMServiceOptions = {}
@@ -178,117 +256,91 @@ export async function queryLLMTrace(
 
   const { systemPrompt, userPrompt } = buildAlgorithmPrompt(query);
 
-  let rawResponse: string;
+  const maxAttempts = options.maxAttempts ?? 2;
+  const messages: ChatMessage[] = [
+    { role: "system", content: systemPrompt },
+    { role: "user", content: userPrompt },
+  ];
 
-  if (options.fetcher) {
-    rawResponse = await options.fetcher(userPrompt, systemPrompt);
-  } else {
-    const apiKey = options.apiKey || getNvidiaApiKey();
+  let lastError: Error | null = null;
 
-    if (apiKey) {
-      // Live NVIDIA NIM API call
-      const isTestEnv =
-        (typeof process !== "undefined" && process.env?.NODE_ENV === "test") ||
-        (typeof import.meta !== "undefined" && import.meta.env?.MODE === "test");
+  for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+    try {
+      let rawResponse: string;
 
-      const endpoint =
-        !isTestEnv &&
-        typeof window !== "undefined" &&
-        window.location.hostname === "localhost"
-          ? "/api/nvidia/chat/completions"
-          : "https://integrate.api.nvidia.com/v1/chat/completions";
+      if (options.fetcher) {
+        const currentPrompt =
+          attempt === 1 ? userPrompt : messages[messages.length - 1].content;
+        rawResponse = await options.fetcher(currentPrompt, systemPrompt);
+      } else {
+        const apiKey = options.apiKey || getNvidiaApiKey();
 
-      const model = options.model || getNvidiaModel();
+        if (apiKey) {
+          const model = options.model || getNvidiaModel();
+          rawResponse = await fetchNvidiaChatCompletion(messages, apiKey, model);
+        } else {
+          // Offline fallback simulation: brief non-blocking delay and select closest preset
+          await new Promise((res) => setTimeout(res, 600));
 
-      let res: Response;
-      const controller = new AbortController();
-      const timeoutMs = 120000;
-      const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
+          if (normalized.includes("binary"))
+            return ALGORITHM_PRESETS.binarySearch.trace;
+          if (normalized.includes("two pointer") || normalized.includes("reverse"))
+            return ALGORITHM_PRESETS.twoPointers.trace;
+          if (normalized.includes("scan") || normalized.includes("max"))
+            return ALGORITHM_PRESETS.linearScan.trace;
 
+          return ALGORITHM_PRESETS.secondLargest.trace;
+        }
+      }
+
+      const cleaned = cleanJsonOutput(rawResponse);
+
+      let parsed: unknown;
       try {
-        res = await fetch(endpoint, {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-            Authorization: `Bearer ${apiKey}`,
-          },
-          body: JSON.stringify({
-            model,
-            messages: [
-              { role: "system", content: systemPrompt },
-              { role: "user", content: userPrompt },
-            ],
-            temperature: 0.2,
-            max_tokens: model.includes("nemotron") ? 6144 : 4096,
-          }),
-          signal: controller.signal,
-        });
-      } catch (networkErr: unknown) {
-        if (
-          (networkErr instanceof DOMException && networkErr.name === "AbortError") ||
-          (networkErr instanceof Error && networkErr.name === "AbortError")
-        ) {
-          throw new Error(
-            `Request timed out after 2 minutes. The NVIDIA API server is experiencing high latency. Please retry your request.`
-          );
+        parsed = JSON.parse(cleaned);
+      } catch (jsonErr: unknown) {
+        if (attempt < maxAttempts) {
+          messages.push({ role: "assistant", content: rawResponse });
+          messages.push({
+            role: "user",
+            content: `SYNTAX ERROR: Your response could not be parsed as valid JSON (${
+              jsonErr instanceof Error ? jsonErr.message : "Syntax error"
+            }). Please output ONLY the complete valid JSON ExecutionTrace adhering strictly to the schema, enclosed in a single \`\`\`json ... \`\`\` block.`,
+          });
+          continue;
         }
         throw new Error(
-          `Network connection failed when connecting to NVIDIA API. Please check your internet connection.`
-        );
-      } finally {
-        clearTimeout(timeoutId);
-      }
-
-      if (!res.ok) {
-        let errorDetail = "";
-        try {
-          const errorJson = await res.json();
-          errorDetail =
-            errorJson?.message ||
-            errorJson?.error?.message ||
-            JSON.stringify(errorJson);
-        } catch {
-          errorDetail = await res.text();
-        }
-        throw new Error(
-          `NVIDIA API error (${res.status}): ${errorDetail || res.statusText}. Please verify your API key.`
+          `Failed to parse LLM response as JSON. Please retry your prompt. (Raw output was not valid JSON)`
         );
       }
 
-      const data = await res.json();
-      rawResponse = data?.choices?.[0]?.message?.content || "";
-    } else {
-      // Offline fallback simulation: brief non-blocking delay and select closest preset
-      await new Promise((res) => setTimeout(res, 600));
+      // Layer 1: Deterministic auto-healing for minor boundary overflows
+      const healed = autoHealExecutionTrace(parsed);
 
-      if (normalized.includes("binary")) return ALGORITHM_PRESETS.binarySearch.trace;
-      if (normalized.includes("two pointer") || normalized.includes("reverse"))
-        return ALGORITHM_PRESETS.twoPointers.trace;
-      if (normalized.includes("scan") || normalized.includes("max"))
-        return ALGORITHM_PRESETS.linearScan.trace;
+      // Layer 2: Strict schema validation
+      const validation = validateExecutionTrace(healed);
+      if (!validation.success) {
+        if (attempt < maxAttempts) {
+          messages.push({ role: "assistant", content: rawResponse });
+          messages.push({
+            role: "user",
+            content: `VALIDATION ERROR in your generated ExecutionTrace:\n${validation.error}\n\nPlease fix this mistake and return the complete corrected JSON ExecutionTrace. Ensure all pointer indices are within valid bounds [-1, array.length], array elements match the input, and at least 4 steps are provided showing the full algorithm.`,
+          });
+          continue;
+        }
+        throw new Error(
+          `Trace validation error: ${validation.error}. Please retry your prompt.`
+        );
+      }
 
-      // Default fallback to second largest canonical trace
-      return ALGORITHM_PRESETS.secondLargest.trace;
+      return validation.data;
+    } catch (err: unknown) {
+      if (attempt >= maxAttempts) {
+        throw err;
+      }
+      lastError = err instanceof Error ? err : new Error(String(err));
     }
   }
 
-  const cleaned = cleanJsonOutput(rawResponse);
-
-  let parsed: unknown;
-  try {
-    parsed = JSON.parse(cleaned);
-  } catch (err: unknown) {
-    throw new Error(
-      `Failed to parse LLM response as JSON. Please retry your prompt. (Raw output was not valid JSON)`
-    );
-  }
-
-  const validation = validateExecutionTrace(parsed);
-  if (!validation.success) {
-    throw new Error(
-      `Trace validation error: ${validation.error}. Please retry your prompt.`
-    );
-  }
-
-  return validation.data;
+  throw lastError || new Error("Failed to generate algorithm trace after retries.");
 }

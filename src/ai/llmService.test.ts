@@ -198,5 +198,60 @@ describe("Seam 2: AI Step Protocol & LLM Service Integration", () => {
     expect(parsed.actions[0].value).toBe(8);
     expect(parsed.actions[1].value).toBe(8);
   });
+
+  it("auto-heals off-by-one pointer index overshoot without failing validation", async () => {
+    const traceWithOffByOne = JSON.parse(
+      JSON.stringify(ALGORITHM_PRESETS.twoPointers.trace)
+    );
+    // Array length is 6, valid pointer range is [-1, 6]. Set toIndex: 7 (off-by-one overshoot)
+    traceWithOffByOne.steps[0].actions.push({
+      type: "move_pointer",
+      pointerId: "p_right",
+      toIndex: 7,
+    });
+
+    const mockFetcher = vi.fn().mockResolvedValue(JSON.stringify(traceWithOffByOne));
+
+    const result = await queryLLMTrace("Two pointer reverse", {
+      fetcher: mockFetcher,
+    });
+
+    expect(result).toBeDefined();
+    const moveAction = result.steps[0].actions.find(
+      (a) => a.type === "move_pointer" && (a as any).toIndex === 6
+    );
+    expect(moveAction).toBeDefined();
+  });
+
+  it("recovers via multi-turn self-correction feedback loop when first attempt fails validation", async () => {
+    const invalidTrace = JSON.parse(
+      JSON.stringify(ALGORITHM_PRESETS.linearScan.trace)
+    );
+    // Break pointer reference to cause validation failure
+    invalidTrace.steps[0].actions[0] = {
+      type: "move_pointer",
+      pointerId: "nonexistent_pointer",
+      toIndex: 1,
+    };
+
+    const validTrace = ALGORITHM_PRESETS.linearScan.trace;
+
+    // First call returns invalidTrace, second call returns validTrace
+    const mockFetcher = vi
+      .fn()
+      .mockResolvedValueOnce(JSON.stringify(invalidTrace))
+      .mockResolvedValueOnce(JSON.stringify(validTrace));
+
+    const result = await queryLLMTrace("Linear scan prompt", {
+      fetcher: mockFetcher,
+      maxAttempts: 2,
+    });
+
+    expect(mockFetcher).toHaveBeenCalledTimes(2);
+    expect(result.initialState.arrays[0].name).toBe("nums");
+    // Verify the second call prompt contained the validation error feedback
+    const secondCallPrompt = mockFetcher.mock.calls[1][0];
+    expect(secondCallPrompt).toContain("VALIDATION ERROR");
+  });
 });
 

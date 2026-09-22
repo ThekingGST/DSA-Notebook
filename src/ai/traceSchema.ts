@@ -225,6 +225,101 @@ export type ValidationResult =
   | { success: true; data: ExecutionTrace }
   | { success: false; error: string; issues: string[] };
 
+/**
+ * Auto-heals common minor edge-case boundaries in LLM-generated traces:
+ * 1. Clamps pointer indices (both in initialState and move_pointer actions) to valid [-1, array.length].
+ * 2. Clamps swap and write_cell indices to [0, array.length - 1].
+ * 3. Filters highlight targets that exceed array length.
+ */
+export function autoHealExecutionTrace(payload: unknown): unknown {
+  if (!payload || typeof payload !== "object") return payload;
+  const rawTrace = payload as any;
+
+  if (Array.isArray(rawTrace.initialState?.arrays)) {
+    const arrayLengths = new Map<string, number>();
+    for (const arr of rawTrace.initialState.arrays) {
+      if (arr && arr.id && Array.isArray(arr.elements)) {
+        arrayLengths.set(arr.id, arr.elements.length);
+      }
+    }
+
+    const pointerTargetMap = new Map<string, string>();
+    if (Array.isArray(rawTrace.initialState?.pointers)) {
+      for (const ptr of rawTrace.initialState.pointers) {
+        if (ptr && ptr.id && ptr.targetArrayId) {
+          pointerTargetMap.set(ptr.id, ptr.targetArrayId);
+          const len = arrayLengths.get(ptr.targetArrayId);
+          if (len !== undefined && typeof ptr.index === "number") {
+            ptr.index = Math.max(-1, Math.min(len, ptr.index));
+          }
+        }
+      }
+    }
+
+    if (Array.isArray(rawTrace.steps)) {
+      for (const step of rawTrace.steps) {
+        if (step && Array.isArray(step.actions)) {
+          for (const action of step.actions) {
+            if (!action || typeof action !== "object") continue;
+            switch (action.type) {
+              case "move_pointer": {
+                if (action.pointerId && typeof action.toIndex === "number") {
+                  const targetArrId = pointerTargetMap.get(action.pointerId);
+                  if (targetArrId && arrayLengths.has(targetArrId)) {
+                    const len = arrayLengths.get(targetArrId)!;
+                    // Auto-heal off-by-one boundary overshoots
+                    if (action.toIndex === len + 1) {
+                      action.toIndex = len;
+                    } else if (action.toIndex === -2) {
+                      action.toIndex = -1;
+                    }
+                  }
+                }
+                break;
+              }
+              case "swap": {
+                if (action.arrayId && arrayLengths.has(action.arrayId)) {
+                  const len = arrayLengths.get(action.arrayId)!;
+                  if (action.indexA === len) action.indexA = len - 1;
+                  if (action.indexB === len) action.indexB = len - 1;
+                }
+                break;
+              }
+              case "write_cell": {
+                if (action.arrayId && arrayLengths.has(action.arrayId)) {
+                  const len = arrayLengths.get(action.arrayId)!;
+                  if (action.index === len) action.index = len - 1;
+                }
+                break;
+              }
+              case "compare": {
+                if (action.arrayId && arrayLengths.has(action.arrayId)) {
+                  const len = arrayLengths.get(action.arrayId)!;
+                  if (action.indexA === len) action.indexA = len - 1;
+                  if (action.indexB === len) action.indexB = len - 1;
+                }
+                break;
+              }
+              case "highlight": {
+                if (Array.isArray(action.targets)) {
+                  action.targets = action.targets.filter((t: any) => {
+                    if (!t || typeof t.index !== "number" || !t.arrayId) return true;
+                    const len = arrayLengths.get(t.arrayId);
+                    return len === undefined || (t.index >= 0 && t.index < len);
+                  });
+                }
+                break;
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+
+  return rawTrace;
+}
+
 export function validateExecutionTrace(payload: unknown): ValidationResult {
   // Gracefully filter out-of-bounds highlight targets if payload is an object
   if (payload && typeof payload === "object") {
