@@ -162,4 +162,23 @@ describe("ExecutionTrace Zod Schema & Validation", () => {
       expect(highlightAction.targets[0].index).toBe(1);
     }
   });
+
+  it("validates arrays initialized with null elements for auxiliary buffers", () => {
+    const traceWithNulls = JSON.parse(JSON.stringify(validTrace));
+    traceWithNulls.initialState.arrays.push({
+      id: "C",
+      name: "merged",
+      elements: [null, null, null],
+      position: { x: 140, y: 500 },
+    });
+    traceWithNulls.steps[0].actions.push({
+      type: "write_cell",
+      arrayId: "C",
+      index: 0,
+      value: 1,
+    });
+
+    const result = validateExecutionTrace(traceWithNulls);
+    expect(result.success).toBe(true);
+  });
 });

@@ -232,7 +232,7 @@ export function compileDSAToExcalidraw(
       elements.push(cellEl);
 
       // Cell value text (vertically centered inside cell)
-      const valText = String(val);
+      const valText = val === null || val === undefined ? "" : String(val);
       const textH = 28;
       const textY = Math.round(cellY + (cellH - textH) / 2);
       const textEl = createBaseElement(
