@@ -1,7 +1,7 @@
 export interface DSAArray {
   id: string;
   name: string;
-  elements: (number | string)[];
+  elements: (number | string | null)[];
   position: { x: number; y: number };
   cellWidth?: number;
   cellHeight?: number;
@@ -61,7 +61,7 @@ export type AlgorithmStepAction =
       result?: boolean;
     }
   | { type: "swap"; arrayId: string; indexA: number; indexB: number }
-  | { type: "write_cell"; arrayId: string; index: number; value: number | string }
+  | { type: "write_cell"; arrayId: string; index: number; value: number | string | null }
   | {
       type: "set_variable";
       variableId: string;

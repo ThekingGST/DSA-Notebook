@@ -52,4 +52,18 @@ describe("PromptBuilder & SystemPrompt", () => {
     expect(contextStr).toContain("target = 7");
     expect(contextStr).toContain("Step 2: Calculate mid");
   });
+
+  it("includes the 6 Universal Archetypes in SYSTEM_PROMPT", () => {
+    expect(SYSTEM_PROMPT).toContain("Archetype 1: Single-Array Scanner");
+    expect(SYSTEM_PROMPT).toContain("Archetype 2: Two-Pointer Convergence");
+    expect(SYSTEM_PROMPT).toContain("Archetype 3: Sliding Window Bounded Range");
+    expect(SYSTEM_PROMPT).toContain("Archetype 4: Dual / Multi-Array Coordination");
+    expect(SYSTEM_PROMPT).toContain("Archetype 5: In-Place Partitioning & Sorting");
+    expect(SYSTEM_PROMPT).toContain("Archetype 6: 2D Matrix / Grid Traversal");
+  });
+
+  it("instructs on dedicated pointers per array and persistent emerald highlights", () => {
+    expect(SYSTEM_PROMPT).toContain("#22c55e");
+    expect(SYSTEM_PROMPT).toContain("targetArrayId");
+  });
 });

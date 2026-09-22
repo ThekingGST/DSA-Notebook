@@ -150,5 +150,155 @@ describe("compileDSAToExcalidraw", () => {
     // Cell 1 was not part of explicit highlights, so it should NOT receive an amber highlight
     expect(cell1?.strokeColor).toBe("#1e1e1e");
   });
+
+  it("automatically stacks multiple arrays vertically with collision-free spacing", () => {
+    const multiArrayState: DSAState = {
+      arrays: [
+        {
+          id: "A",
+          name: "nums",
+          elements: [1, 2, 3],
+          position: { x: 140, y: 320 },
+        },
+        {
+          id: "B",
+          name: "prefixSum",
+          elements: [1, 3, 6],
+          position: { x: 140, y: 320 }, // Colliding initial position
+        },
+      ],
+      pointers: [
+        { id: "p1", name: "i", targetArrayId: "A", index: 0 },
+        { id: "p2", name: "j", targetArrayId: "B", index: 1 },
+      ],
+      variables: [],
+    };
+
+    const elements = compileDSAToExcalidraw(multiArrayState);
+
+    const cellA0 = elements.find((el) => el.id === "cell_A_0");
+    const cellB0 = elements.find((el) => el.id === "cell_B_0");
+
+    expect(cellA0).toBeDefined();
+    expect(cellB0).toBeDefined();
+    // Array B must be vertically below Array A by at least 150px
+    expect(cellB0!.y).toBeGreaterThanOrEqual(cellA0!.y + 150);
+
+    // Pointer p2 (targeting B) must anchor relative to B's stacked Y, not A's Y
+    const ptr2 = elements.find((el) => el.id === "ptr_p2");
+    expect(ptr2).toBeDefined();
+    expect(ptr2!.y).toBeGreaterThan(cellA0!.y);
+  });
+
+  it("renders left-aligned array name badge for each array", () => {
+    const state: DSAState = {
+      arrays: [
+        {
+          id: "arr1",
+          name: "prefixSum",
+          elements: [10, 20, 30],
+          position: { x: 140, y: 260 },
+        },
+      ],
+      pointers: [],
+      variables: [],
+    };
+
+    const elements = compileDSAToExcalidraw(state);
+    const nameEl = elements.find((el) => el.id === "name_arr1");
+
+    expect(nameEl).toBeDefined();
+    expect(nameEl?.type).toBe("text");
+    expect(nameEl?.text).toBe("prefixSum:");
+    expect(nameEl?.customData?.dsaType).toBe("arrayName");
+    // Positioned to the left of the array cells
+    expect(nameEl!.x).toBeLessThan(140);
+  });
+
+  it("renders visually distinguished Variables HUD card with header, divider, and container", () => {
+    const state: DSAState = {
+      arrays: [{ id: "A", name: "nums", elements: [1, 2, 3], position: { x: 140, y: 290 } }],
+      pointers: [],
+      variables: [
+        { id: "v_mid", name: "mid", value: 1 },
+        { id: "v_right", name: "right", value: 1 },
+      ],
+      narration: { title: "Binary Search", text: "Comparing middle element" },
+    };
+
+    const elements = compileDSAToExcalidraw(state);
+
+    // Narration container
+    const narrContainer = elements.find((e) => e.id === "narration_card_container");
+    expect(narrContainer).toBeDefined();
+    expect(narrContainer?.type).toBe("rectangle");
+    expect(narrContainer?.strokeColor).toBe("#3f3f46");
+
+    // Variables card container
+    const varContainer = elements.find((e) => e.id === "var_card_container");
+    expect(varContainer).toBeDefined();
+    expect(varContainer?.type).toBe("rectangle");
+    expect(varContainer?.strokeColor).toBe("#6366f1");
+    expect(varContainer?.backgroundColor).toBe("transparent");
+
+    // Variables header and divider
+    const varHeader = elements.find((e) => e.id === "var_card_header");
+    expect(varHeader).toBeDefined();
+    expect(varHeader?.text).toBe("STATE VARIABLES");
+
+    const varDivider = elements.find((e) => e.id === "var_card_divider");
+    expect(varDivider).toBeDefined();
+
+    // Variable items
+    const varMid = elements.find((e) => e.id === "var_v_mid");
+    expect(varMid).toBeDefined();
+    expect(varMid?.text).toBe("mid = 1");
+
+    // Variables HUD sits to the right of Narration Card (x >= 600)
+    expect(varContainer!.x).toBeGreaterThan(narrContainer!.x + narrContainer!.width - 10);
+  });
+
+  it("guarantees zero overlap between multiline narration, pointers, and array cells", () => {
+    const longNarrationState: DSAState = {
+      arrays: [
+        {
+          id: "A",
+          name: "nums",
+          elements: [4, 1, 3, 2],
+          position: { x: 140, y: 260 }, // AI suggested 260
+        },
+      ],
+      pointers: [
+        { id: "p_i", name: "i", targetArrayId: "A", index: 0 },
+        { id: "p_j", name: "j", targetArrayId: "A", index: 1 },
+      ],
+      variables: [
+        { id: "v1", name: "mid", value: 1 },
+        { id: "v2", name: "right", value: 1 },
+      ],
+      narration: {
+        title: "Merge Sort",
+        text: "Merge sort repeatedly divides the array into smaller halves, sorts those halves, and merges the sorted halves. For this example, [4, 1, 3, 2] is divided into [4, 1] and [3, 2], then merged into the final sorted array [1, 2, 3, 4].",
+      },
+    };
+
+    const elements = compileDSAToExcalidraw(longNarrationState);
+
+    const narrContainer = elements.find((e) => e.id === "narration_card_container")!;
+    const varContainer = elements.find((e) => e.id === "var_card_container")!;
+    const cell0 = elements.find((e) => e.id === "cell_A_0")!;
+    const ptrI = elements.find((e) => e.id === "ptr_p_i")!;
+
+    // 1. Narration and Variables HUD do not horizontally collide
+    expect(varContainer.x).toBeGreaterThanOrEqual(narrContainer.x + narrContainer.width);
+
+    // 2. The array is pushed down below the header cards so pointers never collide with narration
+    const headerBottom = Math.max(narrContainer.y + narrContainer.height, varContainer.y + varContainer.height);
+    expect(cell0.y).toBeGreaterThan(headerBottom);
+
+    // 3. Pointer top is strictly below the header bottom
+    expect(ptrI.y).toBeGreaterThanOrEqual(headerBottom);
+  });
 });
+
 

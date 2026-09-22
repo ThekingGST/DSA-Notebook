@@ -4,7 +4,7 @@ import { ExecutionTrace } from "../engine/types";
 export const DSAArraySchema = z.object({
   id: z.string().min(1, "Array ID is required"),
   name: z.string().min(1, "Array name is required"),
-  elements: z.array(z.union([z.number(), z.string()])),
+  elements: z.array(z.union([z.number(), z.string(), z.null()])),
   position: z.object({
     x: z.number(),
     y: z.number(),
@@ -80,7 +80,7 @@ export const AlgorithmStepActionSchema = z.discriminatedUnion("type", [
     type: z.literal("write_cell"),
     arrayId: z.string().min(1),
     index: z.number().int(),
-    value: z.union([z.number(), z.string()]),
+    value: z.union([z.number(), z.string(), z.null()]),
   }),
   z.object({
     type: z.literal("set_variable"),

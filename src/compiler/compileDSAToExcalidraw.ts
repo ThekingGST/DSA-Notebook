@@ -130,9 +130,72 @@ export function compileDSAToExcalidraw(
   const elements: ExcalidrawCompiledElement[] = [];
   const { arrays, pointers, variables, narration, activeComparison, highlights = [] } = dsaState;
 
+  // Pre-calculate header height for non-overlapping vertical layout
+  const narrationWrapped = narration?.text ? wrapText(narration.text, 48) : "";
+  const fullNarrationText = narration?.title
+    ? (narrationWrapped ? `${narration.title}\n\n${narrationWrapped}` : narration.title)
+    : "";
+  const narrationLineCount = fullNarrationText ? fullNarrationText.split("\n").length : 0;
+  const narrationCardHeight = narrationLineCount > 0 ? Math.max(54, narrationLineCount * 20 + 24) : 0;
+  const narrationBottom = narrationCardHeight > 0 ? 36 + narrationCardHeight : 0;
+
+  const varCount = variables?.length ?? 0;
+  const varCardHeight = varCount > 0 ? Math.max(68, 42 + varCount * 26) : 0;
+  const varCardBottom = varCount > 0 ? 36 + varCardHeight : 0;
+
+  const headerBottom = Math.max(narrationBottom, varCardBottom);
+
+  // 1. Resolve effective layout positions for arrays (with collision-free vertical auto-stacking)
+  const baseArray0Y = headerBottom > 0
+    ? Math.max(ArrayLayout.DEFAULT_BASE_ARRAY_Y, headerBottom + 80)
+    : ArrayLayout.DEFAULT_BASE_ARRAY_Y;
+
+  let currentY = baseArray0Y;
+  const effectiveArrays = arrays.map((arr, arrIdx) => {
+    if (arrIdx === 0) {
+      currentY = arr.position?.y !== undefined
+        ? Math.max(arr.position.y, headerBottom > 0 ? headerBottom + 65 : arr.position.y)
+        : baseArray0Y;
+      return { ...arr, position: { x: arr.position?.x ?? 140, y: currentY } };
+    }
+    const desiredY = arr.position?.y ?? (currentY + ArrayLayout.DEFAULT_ARRAY_STACK_SPACING);
+    currentY = Math.max(desiredY, currentY + ArrayLayout.DEFAULT_ARRAY_STACK_SPACING);
+    return {
+      ...arr,
+      position: { x: arr.position?.x ?? 140, y: currentY },
+    };
+  });
+
   // 1. Compile 1D Arrays
-  arrays.forEach((arr) => {
+  effectiveArrays.forEach((arr) => {
     const groupId = `group_${arr.id}`;
+
+    // Render left-side array name badge
+    if (arr.name) {
+      const nameBadgeWidth = 85;
+      const nameBadgeX = Math.max(10, arr.position.x - nameBadgeWidth - 10);
+      const nameBadgeY = Math.round(arr.position.y + (ArrayLayout.DEFAULT_CELL_HEIGHT - 24) / 2);
+      const nameText = `${arr.name}:`;
+
+      const nameEl = createBaseElement(
+        `name_${arr.id}`,
+        "text",
+        nameBadgeX,
+        nameBadgeY,
+        nameBadgeWidth,
+        24,
+        [groupId],
+        { dsaType: "arrayName", arrayId: arr.id }
+      );
+      nameEl.text = nameText;
+      nameEl.originalText = nameText;
+      nameEl.fontSize = 16;
+      nameEl.fontFamily = 1;
+      nameEl.textAlign = "right";
+      nameEl.verticalAlign = "middle";
+      nameEl.strokeColor = "#71717a";
+      elements.push(nameEl);
+    }
 
     arr.elements.forEach((val, idx) => {
       const cellBounds = ArrayLayout.getCellBounds(arr, idx);
@@ -190,7 +253,7 @@ export function compileDSAToExcalidraw(
       elements.push(cellEl);
 
       // Cell value text (vertically centered inside cell)
-      const valText = String(val);
+      const valText = val === null || val === undefined ? "" : String(val);
       const textH = 28;
       const textY = Math.round(cellY + (cellH - textH) / 2);
       const textEl = createBaseElement(
@@ -248,7 +311,7 @@ export function compileDSAToExcalidraw(
 
   // 2. Compile Pointers
   pointers.forEach((p) => {
-    const targetArr = arrays.find((a) => a.id === p.targetArrayId);
+    const targetArr = effectiveArrays.find((a) => a.id === p.targetArrayId);
     if (!targetArr) return;
 
     const cellCenterX = ArrayLayout.getPointerTargetCenterX(targetArr, p.index);
@@ -291,26 +354,90 @@ export function compileDSAToExcalidraw(
     elements.push(ptrEl);
   });
 
-  // 3. Compile Variables HUD
+  // 3. Compile Variables HUD Card (Dedicated Glassmorphic Inspector Panel)
   if (variables && variables.length > 0) {
-    let vy = 150;
+    const varX = narration?.title ? 620 : 140;
+    const varY = 36;
+    const varWidth = 230;
+
+    // 3a. Variables Card Container (Glassmorphic Indigo Panel)
+    const varContainer = createBaseElement(
+      "var_card_container",
+      "rectangle",
+      varX,
+      varY,
+      varWidth,
+      varCardHeight,
+      ["variables_hud"],
+      { dsaType: "variablesCard" }
+    );
+    varContainer.strokeColor = "#6366f1";
+    varContainer.backgroundColor = "transparent";
+    varContainer.fillStyle = "solid";
+    varContainer.strokeWidth = 1.5;
+    varContainer.roughness = 0;
+    varContainer.roundness = { type: 3 };
+    elements.push(varContainer);
+
+    // 3b. Header Badge: "STATE VARIABLES"
+    const varHeader = createBaseElement(
+      "var_card_header",
+      "text",
+      varX + 14,
+      varY + 10,
+      varWidth - 28,
+      18,
+      ["variables_hud"],
+      { dsaType: "variablesHeader" }
+    );
+    varHeader.text = "STATE VARIABLES";
+    varHeader.originalText = "STATE VARIABLES";
+    varHeader.fontSize = 11;
+    varHeader.fontFamily = 1;
+    varHeader.textAlign = "left";
+    varHeader.verticalAlign = "middle";
+    varHeader.strokeColor = "#a5b4fc";
+    elements.push(varHeader);
+
+    // 3c. Subtle Separator Line
+    const varDivider = createBaseElement(
+      "var_card_divider",
+      "rectangle",
+      varX + 14,
+      varY + 30,
+      varWidth - 28,
+      1,
+      ["variables_hud"],
+      { dsaType: "variablesDivider" }
+    );
+    varDivider.strokeColor = "#4338ca";
+    varDivider.backgroundColor = "#4338ca";
+    varDivider.fillStyle = "solid";
+    varDivider.strokeWidth = 1;
+    varDivider.roughness = 0;
+    elements.push(varDivider);
+
+    // 3d. Variable Entries
+    let vy = varY + 38;
     variables.forEach((v) => {
       const varEl = createBaseElement(
         `var_${v.id}`,
         "text",
-        140,
+        varX + 16,
         vy,
-        180,
-        24,
+        varWidth - 32,
+        22,
         ["variables_hud"],
         { dsaType: "variable", variableId: v.id }
       );
       const text = `${v.name} = ${v.value}`;
       varEl.text = text;
       varEl.originalText = text;
-      varEl.fontSize = 15;
+      varEl.fontSize = 14;
       varEl.fontFamily = 1;
-      varEl.strokeColor = v.color || "#04d361";
+      varEl.textAlign = "left";
+      varEl.verticalAlign = "middle";
+      varEl.strokeColor = v.color || "#38bdf8";
       elements.push(varEl);
       vy += 26;
     });
@@ -318,32 +445,48 @@ export function compileDSAToExcalidraw(
 
   // 4. Compile Step Narration Card
   if (narration && narration.title) {
-    const wrappedExplanation = narration.text ? wrapText(narration.text, 52) : "";
-    const fullText = wrappedExplanation
-      ? `${narration.title}\n${wrappedExplanation}`
-      : narration.title;
+    const cardX = 140;
+    const cardY = 36;
+    const cardWidth = 460;
 
-    const lineCount = fullText.split("\n").length;
-    const cardHeight = Math.max(44, lineCount * 22 + 6);
+    // 4a. Container card for narration
+    const narrationContainer = createBaseElement(
+      "narration_card_container",
+      "rectangle",
+      cardX,
+      cardY,
+      cardWidth,
+      narrationCardHeight,
+      ["narration_group"],
+      { dsaType: "narrationCard" }
+    );
+    narrationContainer.strokeColor = "#3f3f46";
+    narrationContainer.backgroundColor = "rgba(24, 24, 27, 0.65)";
+    narrationContainer.fillStyle = "solid";
+    narrationContainer.strokeWidth = 1.5;
+    narrationContainer.roughness = 0;
+    narrationContainer.roundness = { type: 3 };
+    elements.push(narrationContainer);
 
+    // 4b. Text inside narration card
     const narrationEl = createBaseElement(
       "narration_card",
       "text",
-      140,
-      68,
-      520,
-      cardHeight,
+      cardX + 16,
+      cardY + 12,
+      cardWidth - 32,
+      narrationCardHeight - 24,
       ["narration_group"],
       { dsaType: "narration" }
     );
-    narrationEl.text = fullText;
-    narrationEl.originalText = fullText;
-    narrationEl.fontSize = 15;
+    narrationEl.text = fullNarrationText;
+    narrationEl.originalText = fullNarrationText;
+    narrationEl.fontSize = 14;
     narrationEl.fontFamily = 1;
     narrationEl.lineHeight = 1.35 as any;
     narrationEl.textAlign = "left";
     narrationEl.verticalAlign = "top";
-    narrationEl.strokeColor = "#1e1e1e";
+    narrationEl.strokeColor = "#f4f4f5";
     elements.push(narrationEl);
   }
 

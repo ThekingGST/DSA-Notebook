@@ -27,6 +27,19 @@ export class ArrayLayout {
   static readonly DEFAULT_CELL_HEIGHT = 56;
   static readonly DEFAULT_POINTER_WIDTH = 70;
   static readonly DEFAULT_POINTER_OFFSET_Y = 75;
+  static readonly DEFAULT_ARRAY_STACK_SPACING = 180;
+  static readonly DEFAULT_BASE_ARRAY_Y = 290;
+
+  /**
+   * Computes a deterministic vertical Y offset for vertically stacked arrays.
+   */
+  static getStackedArrayY(
+    arrayIndex: number,
+    baseY = ArrayLayout.DEFAULT_BASE_ARRAY_Y,
+    spacingY = ArrayLayout.DEFAULT_ARRAY_STACK_SPACING
+  ): number {
+    return baseY + arrayIndex * spacingY;
+  }
 
   /**
    * Resolves the cell dimensions for an array, falling back to defaults.
