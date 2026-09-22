@@ -190,5 +190,13 @@ describe("Seam 2: AI Step Protocol & LLM Service Integration", () => {
     const repaired = repairTruncatedJson(jsonWithTrailingCommas);
     expect(() => JSON.parse(repaired)).not.toThrow();
   });
+
+  it("sanitizes unquoted arithmetic expressions and Math functions into valid JSON numbers", () => {
+    const rawWithMath = `{\n  "step": 1,\n  "actions": [\n    {\n      "type": "set_variable",\n      "variableId": "v_windowSum",\n      "value": 2 + 1 + 5,\n      "name": "windowSum"\n    },\n    {\n      "type": "set_variable",\n      "variableId": "v_maxSum",\n      "value": Math.max(8, 7),\n      "name": "maxSum"\n    }\n  ]\n}`;
+    const cleaned = cleanJsonOutput(rawWithMath);
+    const parsed = JSON.parse(cleaned);
+    expect(parsed.actions[0].value).toBe(8);
+    expect(parsed.actions[1].value).toBe(8);
+  });
 });
 

@@ -108,7 +108,9 @@ export const AlgorithmStepSchema = z.object({
 export const ExecutionTraceSchema = z
   .object({
     initialState: DSAStateSchema,
-    steps: z.array(AlgorithmStepSchema),
+    steps: z
+      .array(AlgorithmStepSchema)
+      .min(2, "Algorithm execution trace must contain at least 2 steps showing state progression"),
   })
   .superRefine((trace, ctx) => {
     const arrayLengths = new Map<string, number>();
@@ -224,6 +226,32 @@ export type ValidationResult =
   | { success: false; error: string; issues: string[] };
 
 export function validateExecutionTrace(payload: unknown): ValidationResult {
+  // Gracefully filter out-of-bounds highlight targets if payload is an object
+  if (payload && typeof payload === "object") {
+    const rawTrace = payload as any;
+    if (Array.isArray(rawTrace.initialState?.arrays) && Array.isArray(rawTrace.steps)) {
+      const arrayLengths = new Map<string, number>();
+      for (const arr of rawTrace.initialState.arrays) {
+        if (arr && arr.id && Array.isArray(arr.elements)) {
+          arrayLengths.set(arr.id, arr.elements.length);
+        }
+      }
+      for (const step of rawTrace.steps) {
+        if (step && Array.isArray(step.actions)) {
+          for (const action of step.actions) {
+            if (action && action.type === "highlight" && Array.isArray(action.targets)) {
+              action.targets = action.targets.filter((t: any) => {
+                if (!t || typeof t.index !== "number" || !t.arrayId) return true;
+                const len = arrayLengths.get(t.arrayId);
+                return len === undefined || (t.index >= 0 && t.index < len);
+              });
+            }
+          }
+        }
+      }
+    }
+  }
+
   const parseResult = ExecutionTraceSchema.safeParse(payload);
   if (parseResult.success) {
     return { success: true, data: parseResult.data as ExecutionTrace };

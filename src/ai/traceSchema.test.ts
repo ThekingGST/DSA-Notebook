@@ -131,4 +131,35 @@ describe("ExecutionTrace Zod Schema & Validation", () => {
     const result = validateExecutionTrace(malformed);
     expect(result.success).toBe(false);
   });
+
+  it("rejects traces with fewer than 2 steps", () => {
+    const singleStepTrace = JSON.parse(JSON.stringify(validTrace));
+    singleStepTrace.steps = [validTrace.steps[0]];
+    const result = validateExecutionTrace(singleStepTrace);
+    expect(result.success).toBe(false);
+    if (!result.success) {
+      expect(result.error).toMatch(/at least 2 steps/i);
+    }
+  });
+
+  it("gracefully sanitizes out-of-bounds highlight targets without failing validation", () => {
+    const traceWithOutOfBoundsHighlight = JSON.parse(JSON.stringify(validTrace));
+    traceWithOutOfBoundsHighlight.steps[0].actions.push({
+      type: "highlight",
+      targets: [
+        { arrayId: "arr1", index: 1, color: "#38bdf8" }, // valid (len is 3)
+        { arrayId: "arr1", index: 99, color: "#38bdf8" }, // out of bounds
+      ],
+    });
+
+    const result = validateExecutionTrace(traceWithOutOfBoundsHighlight);
+    expect(result.success).toBe(true);
+    if (result.success) {
+      const highlightAction = result.data.steps[0].actions.find(
+        (a) => a.type === "highlight"
+      ) as any;
+      expect(highlightAction.targets).toHaveLength(1);
+      expect(highlightAction.targets[0].index).toBe(1);
+    }
+  });
 });

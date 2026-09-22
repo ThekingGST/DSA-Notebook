@@ -90,6 +90,39 @@ export function repairTruncatedJson(str: string): string {
   return s;
 }
 
+export function sanitizeJsonExpressions(jsonStr: string): string {
+  // Replace Math.max(a, b, ...) or Math.min(...) with evaluated number
+  let s = jsonStr.replace(/Math\.(max|min)\(([^)]+)\)/g, (_match, func, args) => {
+    try {
+      const evaluatedArgs = args.split(",").map((arg: string) => {
+        const trimmedArg = arg.trim();
+        if (/^[\d\s+\-*/()]+$/.test(trimmedArg)) {
+          return Function(`"use strict"; return (${trimmedArg})`)();
+        }
+        return parseFloat(trimmedArg);
+      });
+      const res = Math[func as "max" | "min"](...evaluatedArgs);
+      return isNaN(res) ? "0" : String(res);
+    } catch {
+      return "0";
+    }
+  });
+
+  // Replace unquoted arithmetic expressions in "value": 1 + 2 + 3,
+  s = s.replace(/"value"\s*:\s*([0-9]+(?:\s*[\+\-\*\/]\s*[0-9]+)+)/g, (_match, expr) => {
+    try {
+      const trimmedExpr = expr.trim();
+      if (/^[\d\s+\-*/()]+$/.test(trimmedExpr)) {
+        const val = Function(`"use strict"; return (${trimmedExpr})`)();
+        return `"value": ${val}`;
+      }
+    } catch {}
+    return _match;
+  });
+
+  return s;
+}
+
 export function cleanJsonOutput(raw: string): string {
   let trimmed = raw.trim();
 
@@ -122,7 +155,9 @@ export function cleanJsonOutput(raw: string): string {
     }
   }
 
-  return repairTruncatedJson(candidateJson);
+  // Pre-sanitize any raw mathematical expressions before repair and JSON parsing
+  const sanitized = sanitizeJsonExpressions(candidateJson);
+  return repairTruncatedJson(sanitized);
 }
 
 export async function queryLLMTrace(
