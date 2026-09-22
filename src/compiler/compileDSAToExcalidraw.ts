@@ -130,8 +130,23 @@ export function compileDSAToExcalidraw(
   const elements: ExcalidrawCompiledElement[] = [];
   const { arrays, pointers, variables, narration, activeComparison, highlights = [] } = dsaState;
 
+  // 1. Resolve effective layout positions for arrays (with vertical auto-stacking)
+  let currentY = arrays[0]?.position?.y ?? ArrayLayout.DEFAULT_BASE_ARRAY_Y;
+  const effectiveArrays = arrays.map((arr, arrIdx) => {
+    if (arrIdx === 0) {
+      currentY = arr.position?.y ?? ArrayLayout.DEFAULT_BASE_ARRAY_Y;
+      return { ...arr, position: { x: arr.position?.x ?? 140, y: currentY } };
+    }
+    const desiredY = arr.position?.y ?? (currentY + ArrayLayout.DEFAULT_ARRAY_STACK_SPACING);
+    currentY = Math.max(desiredY, currentY + ArrayLayout.DEFAULT_ARRAY_STACK_SPACING);
+    return {
+      ...arr,
+      position: { x: arr.position?.x ?? 140, y: currentY },
+    };
+  });
+
   // 1. Compile 1D Arrays
-  arrays.forEach((arr) => {
+  effectiveArrays.forEach((arr) => {
     const groupId = `group_${arr.id}`;
 
     arr.elements.forEach((val, idx) => {
@@ -248,7 +263,7 @@ export function compileDSAToExcalidraw(
 
   // 2. Compile Pointers
   pointers.forEach((p) => {
-    const targetArr = arrays.find((a) => a.id === p.targetArrayId);
+    const targetArr = effectiveArrays.find((a) => a.id === p.targetArrayId);
     if (!targetArr) return;
 
     const cellCenterX = ArrayLayout.getPointerTargetCenterX(targetArr, p.index);

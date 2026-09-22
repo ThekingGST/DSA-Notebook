@@ -36,3 +36,15 @@ _Avoid_: Run log, history dump, replay file
 A precomputed, immutable point-in-time state of all arrays, pointers, variables, and active highlights at a specific step index.
 _Avoid_: Frame, state cache, canvas dump
 
+**Auxiliary Array**:
+A secondary stateful DSA array (such as a prefix sum array, temporary merge buffer, or frequency bucket) declared alongside the primary input array to visually represent $O(N)$ auxiliary memory.
+_Avoid_: Temp array, helper buffer, extra list
+
+**Multi-Array Stacking**:
+The deterministic, client-side vertical layout calculation that positions multiple arrays on the canvas layer with calculated vertical offsets, guaranteeing collision-free rendering of cells, pointers, and index labels.
+_Avoid_: Manual positioning, coordinate guessing
+
+**Array Archetype**:
+A foundational algorithmic classification (e.g. Single-Pass Scanner, Two-Pointer Convergence, Sliding Window, Dual-Array Coordination, In-Place Partitioning, 2D Grid Traversal) that dictates the minimal necessary visual scaffolding (arrays, pointers, variables) for explaining an algorithm.
+_Avoid_: Algorithm category, problem template
+

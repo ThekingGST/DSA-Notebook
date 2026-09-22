@@ -150,5 +150,44 @@ describe("compileDSAToExcalidraw", () => {
     // Cell 1 was not part of explicit highlights, so it should NOT receive an amber highlight
     expect(cell1?.strokeColor).toBe("#1e1e1e");
   });
+
+  it("automatically stacks multiple arrays vertically with collision-free spacing", () => {
+    const multiArrayState: DSAState = {
+      arrays: [
+        {
+          id: "A",
+          name: "nums",
+          elements: [1, 2, 3],
+          position: { x: 140, y: 320 },
+        },
+        {
+          id: "B",
+          name: "prefixSum",
+          elements: [1, 3, 6],
+          position: { x: 140, y: 320 }, // Colliding initial position
+        },
+      ],
+      pointers: [
+        { id: "p1", name: "i", targetArrayId: "A", index: 0 },
+        { id: "p2", name: "j", targetArrayId: "B", index: 1 },
+      ],
+      variables: [],
+    };
+
+    const elements = compileDSAToExcalidraw(multiArrayState);
+
+    const cellA0 = elements.find((el) => el.id === "cell_A_0");
+    const cellB0 = elements.find((el) => el.id === "cell_B_0");
+
+    expect(cellA0).toBeDefined();
+    expect(cellB0).toBeDefined();
+    // Array B must be vertically below Array A by at least 150px
+    expect(cellB0!.y).toBeGreaterThanOrEqual(cellA0!.y + 150);
+
+    // Pointer p2 (targeting B) must anchor relative to B's stacked Y, not A's Y
+    const ptr2 = elements.find((el) => el.id === "ptr_p2");
+    expect(ptr2).toBeDefined();
+    expect(ptr2!.y).toBeGreaterThan(cellA0!.y);
+  });
 });
 
