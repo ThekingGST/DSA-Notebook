@@ -114,7 +114,7 @@ SCHEMA SPECIFICATION:
         "id": string (e.g. "A"),
         "name": string (e.g. "nums"),
         "elements": Array<number | string>,
-        "position": { "x": 140, "y": 260 }
+        "position": { "x": 140, "y": 290 }
       }
     ],
     "pointers": [
