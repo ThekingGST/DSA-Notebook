@@ -372,7 +372,7 @@ export function compileDSAToExcalidraw(
       { dsaType: "variablesCard" }
     );
     varContainer.strokeColor = "#6366f1";
-    varContainer.backgroundColor = "rgba(30, 27, 75, 0.45)";
+    varContainer.backgroundColor = "transparent";
     varContainer.fillStyle = "solid";
     varContainer.strokeWidth = 1.5;
     varContainer.roughness = 0;

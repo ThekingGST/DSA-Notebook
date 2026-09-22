@@ -239,7 +239,7 @@ describe("compileDSAToExcalidraw", () => {
     expect(varContainer).toBeDefined();
     expect(varContainer?.type).toBe("rectangle");
     expect(varContainer?.strokeColor).toBe("#6366f1");
-    expect(varContainer?.backgroundColor).toBe("rgba(30, 27, 75, 0.45)");
+    expect(varContainer?.backgroundColor).toBe("transparent");
 
     // Variables header and divider
     const varHeader = elements.find((e) => e.id === "var_card_header");
