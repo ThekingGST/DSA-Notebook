@@ -21,4 +21,13 @@ describe("Header component", () => {
 
     expect(onModeChange).toHaveBeenCalledWith("teacher");
   });
+
+  it("renders Prompt Studio button and opens PromptStudioModal", () => {
+    render(<Header mode="student" onModeChange={vi.fn()} />);
+    const studioBtn = screen.getByRole("button", { name: /prompt studio/i });
+    expect(studioBtn).toBeInTheDocument();
+
+    fireEvent.click(studioBtn);
+    expect(screen.getByText(/Prompt Studio & Trace Importer/i)).toBeInTheDocument();
+  });
 });

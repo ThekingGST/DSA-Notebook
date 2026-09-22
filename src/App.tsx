@@ -11,7 +11,8 @@ import { useTeacherMode } from "./hooks/useTeacherMode";
 import { compileDSAToExcalidraw } from "./compiler/compileDSAToExcalidraw";
 import { ExecutionTrace } from "./engine/types";
 import { ErrorBoundary } from "./components/ErrorBoundary";
-import { queryLLMTrace } from "./ai/llmService";
+import { queryLLMTrace, cleanJsonOutput } from "./ai/llmService";
+import { autoHealExecutionTrace, validateExecutionTrace } from "./ai/traceSchema";
 import "./App.css";
 
 const canonicalTrace: ExecutionTrace = {
@@ -124,6 +125,26 @@ export const App: React.FC = () => {
     setIsAiLoading(true);
     setAiError(null);
     setLastPrompt(query);
+
+    const trimmed = query.trim();
+
+    // Fast-path: If user pastes raw JSON ExecutionTrace directly into prompt bar
+    if (trimmed.startsWith("{") || trimmed.startsWith("```")) {
+      try {
+        const cleaned = cleanJsonOutput(trimmed);
+        const parsed = JSON.parse(cleaned);
+        const healed = autoHealExecutionTrace(parsed);
+        const validation = validateExecutionTrace(healed);
+        if (validation.success) {
+          setActiveTrace(validation.data);
+          setIsAiLoading(false);
+          return;
+        }
+      } catch {
+        // Fall through to normal LLM generation if JSON parsing fails
+      }
+    }
+
     try {
       const trace = await queryLLMTrace(query);
       setActiveTrace(trace);
@@ -255,7 +276,7 @@ export const App: React.FC = () => {
   return (
     <ErrorBoundary>
       <div className="app-container">
-        <Header mode={mode} onModeChange={setMode} />
+        <Header mode={mode} onModeChange={setMode} onLoadTrace={setActiveTrace} />
         <main className="main-viewport">
           <WhiteboardCanvas
             mode={mode}
