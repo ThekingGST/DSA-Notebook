@@ -74,3 +74,15 @@
   font-size: 12px;
   color: #04d361;
 }
+
+.studio-header-btn {
+  background: rgba(124, 58, 237, 0.15) !important;
+  color: #c084fc !important;
+  border: 1px solid rgba(168, 85, 247, 0.35) !important;
+}
+
+.studio-header-btn:hover {
+  background: rgba(124, 58, 237, 0.3) !important;
+  color: #ffffff !important;
+  border-color: rgba(168, 85, 247, 0.6) !important;
+}

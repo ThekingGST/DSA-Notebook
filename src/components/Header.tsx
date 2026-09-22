@@ -1,6 +1,8 @@
 import React, { useState } from "react";
 import { ApiKeyModal } from "./ApiKeyModal";
+import { PromptStudioModal } from "./PromptStudioModal";
 import { getNvidiaApiKey } from "../ai/llmService";
+import { ExecutionTrace } from "../engine/types";
 import "./Header.css";
 
 export type WorkspaceMode = "student" | "teacher";
@@ -8,10 +10,12 @@ export type WorkspaceMode = "student" | "teacher";
 interface HeaderProps {
   mode: WorkspaceMode;
   onModeChange: (mode: WorkspaceMode) => void;
+  onLoadTrace?: (trace: ExecutionTrace) => void;
 }
 
-export const Header: React.FC<HeaderProps> = ({ mode, onModeChange }) => {
+export const Header: React.FC<HeaderProps> = ({ mode, onModeChange, onLoadTrace }) => {
   const [isModalOpen, setIsModalOpen] = useState(false);
+  const [isStudioOpen, setIsStudioOpen] = useState(false);
   const [hasKey, setHasKey] = useState<boolean>(() => !!getNvidiaApiKey());
 
   const handleSaved = () => {
@@ -49,6 +53,14 @@ export const Header: React.FC<HeaderProps> = ({ mode, onModeChange }) => {
         <div className="header-right" style={{ gap: "10px" }}>
           <button
             type="button"
+            className="api-key-header-btn studio-header-btn"
+            onClick={() => setIsStudioOpen(true)}
+            title="AI Prompt Studio & Trace Importer (ChatGPT / Gemini / Claude)"
+          >
+            ⚡ Prompt Studio
+          </button>
+          <button
+            type="button"
             className={`api-key-header-btn ${hasKey ? "connected" : ""}`}
             onClick={() => setIsModalOpen(true)}
             title="Configure NVIDIA API Key"
@@ -63,6 +75,14 @@ export const Header: React.FC<HeaderProps> = ({ mode, onModeChange }) => {
         isOpen={isModalOpen}
         onClose={() => setIsModalOpen(false)}
         onSaved={handleSaved}
+      />
+
+      <PromptStudioModal
+        isOpen={isStudioOpen}
+        onClose={() => setIsStudioOpen(false)}
+        onLoadTrace={(trace) => {
+          onLoadTrace?.(trace);
+        }}
       />
     </>
   );
